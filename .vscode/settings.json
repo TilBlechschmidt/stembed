@@ -1,0 +1,7 @@
+{
+    "rust-analyzer.lens.implementations": false,
+    "rust-analyzer.cargo.allFeatures": true,
+    "rust-analyzer.linkedProjects": [
+        "code/stembed/Cargo.toml"
+    ]
+}
