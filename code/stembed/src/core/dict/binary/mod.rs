@@ -10,11 +10,13 @@ use crate::{
 };
 use alloc::{rc::Rc, string::ToString};
 use core::hash::{Hash, Hasher};
-use fnv::FnvHasher;
 use smallvec::smallvec;
 
 mod entry;
 pub use entry::*;
+
+mod fnv;
+use fnv::FnvHasher;
 
 #[derive(Debug)]
 pub enum BinaryDictionaryError {

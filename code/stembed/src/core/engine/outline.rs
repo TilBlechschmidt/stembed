@@ -1,6 +1,6 @@
 use super::Command;
 use crate::constants::{AVG_CMD_COUNT, AVG_STROKE_COUNT};
-use smallvec::{SmallVec};
+use smallvec::SmallVec;
 
 /// Combination of strokes which have been identified as an outline.
 /// Additionally contains information about the number of commands the outline produced

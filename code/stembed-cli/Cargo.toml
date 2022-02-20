@@ -5,5 +5,5 @@ edition = "2021"
 authors = ["Til Blechschmidt <til@blechschmidt.dev>"]
 
 [dependencies]
-stembed = { path = "../stembed", features = ["compile", "desktop"] }
+stembed = { path = "../stembed", features = ["import", "compile", "serial", "desktop"] }
 clap = { version = "3.0", features = ["derive"] }

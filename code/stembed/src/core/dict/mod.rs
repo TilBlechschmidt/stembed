@@ -5,8 +5,7 @@ use smallvec::SmallVec;
 mod ext;
 pub use ext::*;
 
-// TODO Make this mod private once all the compilation stuff has been moved out!
-pub mod binary;
+pub(crate) mod binary;
 pub use binary::BinaryDictionary;
 
 pub type CommandList<OutputCommand> = SmallVec<[Command<OutputCommand>; AVG_CMD_COUNT]>;

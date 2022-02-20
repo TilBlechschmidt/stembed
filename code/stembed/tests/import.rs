@@ -1,7 +1,7 @@
 use stembed::{
     compile::BinaryDictionaryCompiler,
     core::{
-        dict::binary::BinaryDictionary,
+        dict::BinaryDictionary,
         engine::Engine,
         processor::{text_formatter::TextFormatter, CommandProcessor},
         Stroke, StrokeContext,
