@@ -15,18 +15,18 @@ pub enum BinaryDictionaryEntryError {
     TooManyCommands,
 }
 
-pub type Outline = SmallVec<[Stroke; AVG_STROKE_COUNT]>;
+pub type Outline<'c> = SmallVec<[Stroke<'c>; AVG_STROKE_COUNT]>;
 
-pub(crate) struct BinaryDictionaryEntry {
+pub(crate) struct BinaryDictionaryEntry<'c> {
     tag: u16,
-    outline: Outline,
+    outline: Outline<'c>,
     commands: CommandList<TextOutputCommand>,
 }
 
-impl BinaryDictionaryEntry {
+impl<'c> BinaryDictionaryEntry<'c> {
     pub(crate) fn new(
         tag: u16,
-        outline: Outline,
+        outline: Outline<'c>,
         commands: CommandList<TextOutputCommand>,
     ) -> Result<Self, BinaryDictionaryEntryError> {
         if tag > 32 {
@@ -48,7 +48,7 @@ impl BinaryDictionaryEntry {
         self.tag
     }
 
-    pub fn outline(&self) -> &Outline {
+    pub fn outline(&self) -> &Outline<'c> {
         &self.outline
     }
 

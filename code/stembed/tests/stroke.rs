@@ -1,4 +1,8 @@
-use stembed::core::{Stroke, StrokeContext, StrokeContextError};
+use stembed::{
+    core::{Stroke, StrokeContext, StrokeContextError},
+    io::{HeapFile, Seek, SeekFrom},
+    serialize::{Deserialize, Serialize},
+};
 
 #[test]
 fn blub() {
@@ -6,6 +10,18 @@ fn blub() {
     let stroke = Stroke::from_str("KH-PD|FN1,FN2", &context).unwrap();
     let output = stroke.to_string();
     assert_eq!(output, "KH-PD|FN1,FN2");
+}
+
+#[test]
+fn survives_serialization_roundtrip() {
+    let context = StrokeContext::new("#STKPWHR", "AO*EU", "FRPBLGTSDZ", &["FN1", "FN2"]).unwrap();
+    let stroke = Stroke::from_str("KH-PD|FN1,FN2", &context).unwrap();
+
+    let mut output = HeapFile::new();
+    stroke.serialize(&mut output).unwrap();
+    output.seek(SeekFrom::Start(0)).unwrap();
+    let deserialized = Stroke::deserialize(&mut output, &context).unwrap();
+    assert_eq!(stroke, deserialized);
 }
 
 #[test]

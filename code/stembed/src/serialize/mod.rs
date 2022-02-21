@@ -20,5 +20,5 @@ pub trait Deserialize: Sized {
     type Context;
     type Error;
 
-    fn deserialize(reader: &mut impl Read, context: &Self::Context) -> Result<Self, Self::Error>;
+    fn deserialize(reader: &mut impl Read, context: Self::Context) -> Result<Self, Self::Error>;
 }

@@ -14,7 +14,7 @@ pub trait Dictionary {
     type Stroke;
     type OutputCommand;
 
-    fn lookup(&mut self, outline: &[Self::Stroke]) -> Option<CommandList<Self::OutputCommand>>;
+    fn lookup(&self, outline: &[Self::Stroke]) -> Option<CommandList<Self::OutputCommand>>;
     fn fallback_commands(&self, stroke: &Self::Stroke) -> CommandList<Self::OutputCommand>;
 
     fn longest_outline_length(&self) -> usize;

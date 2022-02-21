@@ -13,15 +13,15 @@ use crate::{
 use super::{Deserialize, Serialize};
 
 #[derive(Debug)]
-pub enum BinaryDictionaryEntrySerializationError {
+pub enum BinaryDictionaryEntrySerializationError<'c> {
     IOError(io::Error),
-    StrokeUnserializable(<Stroke as Serialize>::Error),
+    StrokeUnserializable(<Stroke<'c> as Serialize>::Error),
     CommandUnserializable(<Command<TextOutputCommand> as Serialize>::Error),
     InvalidData(BinaryDictionaryEntryError),
 }
 
-impl Serialize for BinaryDictionaryEntry {
-    type Error = BinaryDictionaryEntrySerializationError;
+impl<'c> Serialize for BinaryDictionaryEntry<'c> {
+    type Error = BinaryDictionaryEntrySerializationError<'c>;
 
     fn serialize(&self, writer: &mut impl io::Write) -> Result<(), Self::Error> {
         let mut info: u16 = 0;
@@ -46,13 +46,13 @@ impl Serialize for BinaryDictionaryEntry {
     }
 }
 
-impl Deserialize for BinaryDictionaryEntry {
-    type Context = <Stroke as Deserialize>::Context;
-    type Error = BinaryDictionaryEntrySerializationError;
+impl<'c> Deserialize for BinaryDictionaryEntry<'c> {
+    type Context = <Stroke<'c> as Deserialize>::Context;
+    type Error = BinaryDictionaryEntrySerializationError<'c>;
 
     fn deserialize(
         reader: &mut impl io::Read,
-        context: &Self::Context,
+        context: Self::Context,
     ) -> Result<Self, Self::Error> {
         let info = reader
             .read_u16()
@@ -64,7 +64,7 @@ impl Deserialize for BinaryDictionaryEntry {
         let mut outline = SmallVec::new();
         for _ in 0..stroke_count {
             outline.push(
-                Stroke::deserialize(reader, &context)
+                Stroke::deserialize(reader, context)
                     .map_err(BinaryDictionaryEntrySerializationError::IOError)?,
             );
         }
@@ -72,12 +72,37 @@ impl Deserialize for BinaryDictionaryEntry {
         let mut commands = SmallVec::new();
         for _ in 0..command_count {
             commands.push(
-                Command::deserialize(reader, &())
+                Command::deserialize(reader, ())
                     .map_err(BinaryDictionaryEntrySerializationError::IOError)?,
             );
         }
 
         Self::new(tag, outline, commands)
             .map_err(BinaryDictionaryEntrySerializationError::InvalidData)
+    }
+}
+
+#[cfg(test)]
+mod does {
+    use crate::{
+        core::{dict::binary::BinaryDictionaryEntry, Stroke, StrokeContext},
+        io::{HeapFile, Seek, SeekFrom},
+        serialize::{Deserialize, Serialize},
+    };
+    use smallvec::smallvec;
+
+    #[test]
+    fn survive_roundtrip_with_multiple_extra_keys() {
+        let context =
+            StrokeContext::new("#STKPWHR", "AO*EU", "FRPBLGTSDZ", &["FN1", "FN2"]).unwrap();
+        let stroke = Stroke::from_str("KPA*", &context).unwrap();
+        let entry = BinaryDictionaryEntry::new(16, smallvec![stroke], smallvec![]).unwrap();
+
+        let mut buf = HeapFile::new();
+        entry.serialize(&mut buf).unwrap();
+        buf.seek(SeekFrom::Start(0)).unwrap();
+        let deserialized = BinaryDictionaryEntry::deserialize(&mut buf, &context).unwrap();
+
+        assert_eq!(entry.outline(), deserialized.outline());
     }
 }

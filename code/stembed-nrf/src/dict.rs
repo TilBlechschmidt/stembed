@@ -1,16 +1,23 @@
+use core::marker::PhantomData;
+
 use alloc::string::ToString;
-use stembed::core::{dict::Dictionary, Stroke, processor::text_formatter::TextOutputCommand, engine::Command};
 use smallvec::smallvec;
+use stembed::core::{
+    dict::Dictionary, engine::Command, processor::text_formatter::TextOutputCommand, Stroke,
+};
 
-pub struct DummyDictionary;
+#[derive(Default)]
+pub struct DummyDictionary<'c> {
+    phantom: PhantomData<&'c ()>,
+}
 
-impl Dictionary for DummyDictionary {
-    type Stroke = Stroke;
+impl<'c> Dictionary for DummyDictionary<'c> {
+    type Stroke = Stroke<'c>;
     type OutputCommand = TextOutputCommand;
 
     fn lookup(
-        &mut self,
-        outline: &[Self::Stroke],
+        &self,
+        _outline: &[Self::Stroke],
     ) -> Option<stembed::core::dict::CommandList<Self::OutputCommand>> {
         None
     }

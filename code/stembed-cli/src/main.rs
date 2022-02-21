@@ -7,7 +7,7 @@ use std::{
 use stembed::{
     compile::BinaryDictionaryCompiler,
     core::{
-        dict::BinaryDictionary,
+        dict::{BinaryDictionary, Dictionary},
         engine::Engine,
         processor::{text_formatter::TextFormatter, CommandProcessor},
         Stroke, StrokeContext,
@@ -43,12 +43,24 @@ enum Commands {
         #[clap(short, long = "dictionary")]
         dictionary_path: PathBuf,
     },
+
+    TestLookup {
+        #[clap(short, long = "dictionary")]
+        dictionary_path: PathBuf,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::TestLookup { dictionary_path } => {
+            let mut dictionary_file = FileReader::open(dictionary_path)?;
+            let dictionary = BinaryDictionary::new(&mut dictionary_file).unwrap();
+            let outline = [Stroke::from_str("KPA*", dictionary.stroke_context()).unwrap()];
+            let result = dictionary.lookup(&outline);
+            println!("{:?}", result);
+        }
         Commands::Compile { inputs, output } => {
             let context = StrokeContext::new("#STKPWHR", "AO*EU", "FRPBLGTSDZ", &[])
                 .expect("default stroke context");
@@ -74,16 +86,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut dictionary_file = FileReader::open(dictionary_path)?;
             let dictionary = BinaryDictionary::new(&mut dictionary_file).unwrap();
 
-            let mut engine = Engine::new(dictionary);
+            let mut engine = Engine::new(&dictionary);
             let mut formatter = TextFormatter::new();
 
             let mut input_source = GeminiPR::new(SerialPort::new("/dev/tty.usbserial-0001")?);
             let mut output_sink = OSOutput;
 
             loop {
-                let context = engine.dictionary().stroke_context().clone();
                 let input = input_source.scan()?;
-                let stroke = Stroke::from_input(input, &GeminiPR::DEFAULT_KEYMAP, context);
+                let stroke = Stroke::from_input(
+                    input,
+                    &GeminiPR::DEFAULT_KEYMAP,
+                    dictionary.stroke_context(),
+                );
                 let delta = engine.push(stroke);
                 let output = formatter.consume(delta);
                 output_sink.send(output);

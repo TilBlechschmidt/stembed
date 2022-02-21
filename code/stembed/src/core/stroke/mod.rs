@@ -1,25 +1,27 @@
 use crate::{constants::AVG_STROKE_BIT_COUNT, input::InputKeyState};
-use alloc::rc::Rc;
 use core::{fmt::Display, iter::Peekable};
 use smallvec::SmallVec;
 use smol_str::SmolStr;
+
+mod context;
+pub use context::*;
 
 /// Stenography stroke implementation based on a bit vector.
 /// Because the bits themselves do not contain any information on what
 /// keys they represent, the struct holds a reference to the [`StrokeContext`]
 /// that was used to construct it. This will be used when using e.g. `.to_string()`.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Stroke {
+pub struct Stroke<'c> {
     pub(crate) bit_vec: SmallVec<[u8; AVG_STROKE_BIT_COUNT / 8]>,
-    pub(crate) context: SharedStrokeContext,
+    pub(crate) context: &'c StrokeContext,
 }
 
-impl Stroke {
-    fn new(bits: impl Iterator<Item = bool>, context: SharedStrokeContext) -> Self {
+impl<'c> Stroke<'c> {
+    fn new(bits: impl Iterator<Item = bool>, context: &'c StrokeContext) -> Self {
         let mut bits = bits.peekable();
         let mut bit_vec = SmallVec::new();
 
-        while bits.peek().is_some() {
+        while bits.peek().is_some() && bit_vec.len() < context.byte_count() {
             let byte = bits
                 .by_ref()
                 .take(8)
@@ -29,10 +31,15 @@ impl Stroke {
             bit_vec.push(byte);
         }
 
+        // Pad the vector with empty bytes if the input does not contain a sufficient amount of bits
+        while bit_vec.len() < context.byte_count() {
+            bit_vec.push(0);
+        }
+
         Self { bit_vec, context }
     }
 
-    fn new_empty(context: SharedStrokeContext) -> Self {
+    fn new_empty(context: &'c StrokeContext) -> Self {
         Self {
             bit_vec: core::iter::repeat(0).take(context.byte_count()).collect(),
             context,
@@ -63,8 +70,8 @@ impl Stroke {
     pub fn from_input<const KEY_COUNT: usize>(
         input: [InputKeyState; KEY_COUNT],
         keymap: &[Key; KEY_COUNT],
-        context: SharedStrokeContext,
-    ) -> Stroke {
+        context: &'c StrokeContext,
+    ) -> Self {
         let mut stroke = Stroke::new_empty(context);
 
         for (pressed, key) in input.into_iter().zip(keymap) {
@@ -78,7 +85,7 @@ impl Stroke {
 
     pub fn from_str(
         input: impl AsRef<str>,
-        context: &SharedStrokeContext,
+        context: &'c StrokeContext,
     ) -> Result<Stroke, StrokeParseError> {
         let input = input.as_ref();
         let mut main_keys = input.chars().take_while(|c| *c != '|').peekable();
@@ -146,7 +153,7 @@ impl Stroke {
     }
 }
 
-impl Display for Stroke {
+impl<'c> Display for Stroke<'c> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use core::fmt::Write;
 
@@ -221,155 +228,5 @@ impl Display for Stroke {
         }
 
         Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum StrokeContextError {
-    EmptyExtraKey,
-    ReservedTokenUsed,
-    DuplicateKey,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum StrokeParseError {
-    LeftoverCharacters,
-    NoSeparator,
-}
-
-impl core::fmt::Display for StrokeParseError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            StrokeParseError::LeftoverCharacters => {
-                f.write_str("encountered leftover characters at the end of the stroke")
-            }
-            StrokeParseError::NoSeparator => {
-                f.write_str("stroke is missing a separator or 'middle' key to be unambiguous")
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Key {
-    Left(char),
-    Middle(char),
-    Right(char),
-    Extra(&'static str),
-}
-
-pub type SharedStrokeContext = Rc<StrokeContext>;
-
-// TODO This is not 100% unicode safe – at the moment it considers unicode scalars as keys, not grapheme clusters
-#[derive(Debug, PartialEq, Eq)]
-pub struct StrokeContext {
-    pub(crate) left: SmolStr,
-    pub(crate) middle: SmolStr,
-    pub(crate) right: SmolStr,
-    pub(crate) extra: SmallVec<[SmolStr; 16]>,
-}
-
-impl StrokeContext {
-    pub fn new(
-        left: impl AsRef<str>,
-        middle: impl AsRef<str>,
-        right: impl AsRef<str>,
-        extra: &[&str],
-    ) -> Result<Rc<Self>, StrokeContextError> {
-        let instance = Self {
-            left: SmolStr::new_inline(left.as_ref()),
-            middle: SmolStr::new_inline(middle.as_ref()),
-            right: SmolStr::new_inline(right.as_ref()),
-            extra: extra
-                .iter()
-                .map(|s| SmolStr::new_inline(s.as_ref()))
-                .collect(),
-        };
-
-        // Check that no reserved tokens are used in left,middle,right
-        for token in ['|', '-'] {
-            if instance.left.contains(token)
-                || instance.middle.contains(token)
-                || instance.right.contains(token)
-            {
-                return Err(StrokeContextError::ReservedTokenUsed);
-            }
-        }
-
-        // Ensure that extra keys are not empty or use reserved tokens
-        for key in instance.extra.iter() {
-            if key.is_empty() {
-                return Err(StrokeContextError::EmptyExtraKey);
-            } else if key.contains(',') {
-                return Err(StrokeContextError::ReservedTokenUsed);
-            }
-        }
-
-        // Assert that there are no duplicate keys creating ambiguity
-        for side in [&instance.left, &instance.middle, &instance.right] {
-            for (index, char) in side.as_str().char_indices() {
-                if let Some(remainder) = side.as_str().get(index..) {
-                    for following_char in remainder.chars().skip(1) {
-                        if char == following_char {
-                            return Err(StrokeContextError::DuplicateKey);
-                        }
-                    }
-                }
-            }
-        }
-
-        for index in 0..instance.extra.len() {
-            let value = &instance.extra[index];
-            let remainder = &instance.extra[(index + 1)..];
-            if remainder.contains(value) {
-                return Err(StrokeContextError::DuplicateKey);
-            }
-        }
-
-        Ok(Rc::new(instance))
-    }
-
-    pub fn key_count(&self) -> usize {
-        self.left.chars().count()
-            + self.middle.chars().count()
-            + self.right.chars().count()
-            + self.extra.len()
-    }
-
-    pub(crate) fn byte_count(&self) -> usize {
-        // Integer divide and ceil to get the minimum byte count required
-        // TODO Replace this once https://github.com/rust-lang/rust/issues/88581 lands on stable
-        (self.key_count() + 8 - 1) / 8
-    }
-
-    fn bit_index(&self, key: &Key) -> Option<usize> {
-        match key {
-            Key::Left(expected) => find_char_index(&self.left, expected),
-            Key::Middle(expected) => {
-                find_char_index(&self.middle, expected).map(|i| i + self.left.chars().count())
-            }
-            Key::Right(expected) => find_char_index(&self.right, expected)
-                .map(|i| i + self.left.chars().count() + self.middle.chars().count()),
-            Key::Extra(expected) => {
-                self.extra
-                    .iter()
-                    .enumerate()
-                    .find(|s| s.1 == expected)
-                    .map(|(i, _)| {
-                        i + self.left.chars().count()
-                            + self.middle.chars().count()
-                            + self.right.chars().count()
-                    })
-            }
-        }
-    }
-}
-
-/// Finds the first occurence of the expected character in the input string and returns the character index (not the byte index)
-fn find_char_index(string: &str, expected: &char) -> Option<usize> {
-    if string.contains(*expected) {
-        Some(string.chars().take_while(|c| c != expected).count())
-    } else {
-        None
     }
 }

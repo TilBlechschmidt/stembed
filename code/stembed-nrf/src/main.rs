@@ -78,7 +78,8 @@ fn test_engine(p: Peripherals) {
         debug!("Heap usage: {} bytes", ALLOCATOR.used());
 
         info!("Creating engine");
-        let mut engine = Engine::new(DummyDictionary);
+        let dictionary = DummyDictionary::default();
+        let mut engine = Engine::new(&dictionary);
         debug!("Heap usage: {} bytes", ALLOCATOR.used());
 
         info!("Creating formatter");
@@ -121,8 +122,7 @@ fn test_engine(p: Peripherals) {
         loop {
             let input = input_source.scan().unwrap();
             debug!("Received input");
-            let stroke =
-                Stroke::from_input(input, &KeymatrixInput::DEFAULT_KEYMAP, context.clone());
+            let stroke = Stroke::from_input(input, &KeymatrixInput::DEFAULT_KEYMAP, &context);
             debug!("Processing stroke: {}", stroke.to_string().as_str());
             let delta = engine.push(stroke);
             let output = formatter.consume(delta);

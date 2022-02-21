@@ -1,6 +1,5 @@
 use super::dict::DictExt;
-use crate::constants::{AVG_OUTLINE_RATIO, AVG_STROKE_COUNT};
-use alloc::collections::VecDeque;
+use crate::constants::{AVG_OUTLINE_RATIO, AVG_STROKE_COUNT, HISTORY_SIZE};
 use smallvec::SmallVec;
 
 mod command;
@@ -9,30 +8,28 @@ pub use command::*;
 mod outline;
 pub use outline::*;
 
-pub struct Engine<D>
+mod buffer;
+pub use buffer::HistoryBuffer;
+
+pub struct Engine<'d, D>
 where
     D: DictExt,
     D::Stroke: Clone,
 {
-    // TODO Replace with fixed-size stack-allocated version :)
-    history: VecDeque<MatchedOutline<D::Stroke>>,
-    dictionary: D,
+    history: HistoryBuffer<MatchedOutline<D::Stroke>, HISTORY_SIZE>,
+    dictionary: &'d D,
 }
 
-impl<D> Engine<D>
+impl<'d, D> Engine<'d, D>
 where
     D: DictExt,
     D::Stroke: Clone + core::fmt::Debug,
 {
-    pub fn new(dictionary: D) -> Self {
+    pub fn new(dictionary: &'d D) -> Self {
         Self {
-            history: VecDeque::new(),
+            history: HistoryBuffer::new(),
             dictionary,
         }
-    }
-
-    pub fn dictionary(&mut self) -> &mut D {
-        &mut self.dictionary
     }
 
     pub fn push(&mut self, stroke: D::Stroke) -> CommandDelta<D::OutputCommand> {
@@ -57,7 +54,7 @@ where
         let target_count = self.dictionary.longest_outline_length();
 
         while stroke_count < target_count {
-            match self.history.pop_back() {
+            match self.history.pop() {
                 Some(outline) => {
                     stroke_count += outline.strokes.len();
                     old_outlines.push(outline);
@@ -103,7 +100,7 @@ where
             // we only have to compare their length to assert equality – saving on a couple of instructions ;)
             if old.strokes.len() == new.strokes.len() {
                 // Both are equal, just put it back on the history stack
-                self.history.push_back(old);
+                self.history.push(old);
             } else {
                 // They diverged! Undo the old one, apply the new one.
                 output.to_undo += old.command_count as usize;
@@ -139,7 +136,7 @@ where
         // Treat "empty" commands (mostly EngineCommands) as non-existent in terms of the stroke history
         if command_count > 0 {
             self.history
-                .push_back(MatchedOutline::new(new.strokes, command_count));
+                .push(MatchedOutline::new(new.strokes, command_count));
         }
     }
 

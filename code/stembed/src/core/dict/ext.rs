@@ -7,7 +7,7 @@ type OutlineList<'s, Stroke, OutputCommand> =
 
 pub trait DictExt: Dictionary {
     fn find_outlines<'s, 'f>(
-        &mut self,
+        &self,
         strokes: &'s [Self::Stroke],
     ) -> OutlineList<'s, Self::Stroke, Self::OutputCommand>;
 }
@@ -17,13 +17,13 @@ where
     D: Dictionary<Stroke = Stroke, OutputCommand = OutputCommand>,
 {
     fn find_outlines<'s, 'f>(
-        &mut self,
+        &self,
         strokes: &'s [Stroke],
     ) -> OutlineList<'s, Stroke, OutputCommand> {
         let longest_outline_length = self.longest_outline_length();
 
         // Helper function which finds one outline in the given slice
-        let mut find_longest_matching_outline =
+        let find_longest_matching_outline =
             |slice: &'s [Stroke]| -> FetchedOutline<'s, Stroke, OutputCommand> {
                 assert!(
                     !slice.is_empty(),

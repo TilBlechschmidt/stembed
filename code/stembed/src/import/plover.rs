@@ -4,7 +4,7 @@ use crate::{
         dict::{binary::Outline, CommandList},
         engine::{Command, EngineCommand},
         processor::text_formatter::{AttachmentMode, CapitalizationMode, TextOutputCommand},
-        SharedStrokeContext, Stroke,
+        Stroke, StrokeContext,
     },
 };
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
@@ -112,9 +112,9 @@ where
     not(json_char(), |c| *c == '/')
 }
 
-fn stroke<'c, Input>(context: &'c SharedStrokeContext) -> impl Parser<Input, Output = Stroke> + 'c
+fn stroke<'c, Input>(context: &'c StrokeContext) -> impl Parser<Input, Output = Stroke<'c>>
 where
-    Input: Stream<Token = char> + 'c,
+    Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     many(stroke_char()).and_then(move |stroke: String| {
@@ -129,9 +129,9 @@ where
     })
 }
 
-fn outline<'c, Input>(context: &'c SharedStrokeContext) -> impl Parser<Input, Output = Outline> + 'c
+fn outline<'c, Input>(context: &'c StrokeContext) -> impl Parser<Input, Output = Outline<'c>>
 where
-    Input: Stream<Token = char> + 'c,
+    Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     between(
@@ -281,10 +281,10 @@ where
 }
 
 fn entry<'c, Input>(
-    context: &'c SharedStrokeContext,
-) -> impl Parser<Input, Output = (Outline, CommandList<TextOutputCommand>)> + 'c
+    context: &'c StrokeContext,
+) -> impl Parser<Input, Output = (Outline<'c>, CommandList<TextOutputCommand>)>
 where
-    Input: Stream<Token = char> + 'c,
+    Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     (outline(context), lex(char(':')), translation()).map(|t| (t.0, t.2))
@@ -292,13 +292,13 @@ where
 
 pub fn parse_dict<'c, Input>(
     input: Input,
-    context: &'c SharedStrokeContext,
+    context: &'c StrokeContext,
 ) -> Result<
-    impl Iterator<Item = Result<(Outline, CommandList<TextOutputCommand>), Input::Error>> + 'c,
+    impl Iterator<Item = Result<(Outline<'c>, CommandList<TextOutputCommand>), Input::Error>>,
     Input::Error,
 >
 where
-    Input: Stream<Token = char> + 'c,
+    Input: Stream<Token = char>,
     Input::Error: ParseError<Input::Token, Input::Range, Input::Position>,
 {
     // Parse just the header

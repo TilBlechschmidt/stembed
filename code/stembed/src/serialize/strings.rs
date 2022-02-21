@@ -39,7 +39,7 @@ impl Deserialize for SmolStr {
     type Context = ();
     type Error = StringSerializationError;
 
-    fn deserialize(reader: &mut impl Read, _context: &Self::Context) -> Result<Self, Self::Error> {
+    fn deserialize(reader: &mut impl Read, _context: Self::Context) -> Result<Self, Self::Error> {
         let mut data = [0u8; u8::MAX as usize];
         let length = reader
             .read_u8()

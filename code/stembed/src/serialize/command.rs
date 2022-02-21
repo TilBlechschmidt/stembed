@@ -108,7 +108,7 @@ impl Deserialize for Command<TextOutputCommand> {
 
     fn deserialize(
         reader: &mut impl crate::io::Read,
-        _context: &Self::Context,
+        _context: Self::Context,
     ) -> Result<Self, Self::Error> {
         use AttachmentMode::*;
         use CapitalizationMode::*;

@@ -31,7 +31,7 @@ impl Dictionary for TestDict {
     type OutputCommand = TestCommand;
 
     fn lookup(
-        &mut self,
+        &self,
         outline: &[Self::Stroke],
     ) -> Option<SmallVec<[Command<Self::OutputCommand>; 2]>> {
         self.0.get(outline).map(|v| {
@@ -72,7 +72,7 @@ fn miep() {
         vec![Command::Engine(EngineCommand::UndoPrevious)],
     );
 
-    let mut engine = Engine::new(dict);
+    let mut engine = Engine::new(&dict);
 
     assert_eq!(
         engine.push(STROKE_A),

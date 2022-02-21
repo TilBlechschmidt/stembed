@@ -76,17 +76,12 @@ pub struct BinaryDictionaryCompiler<'c> {
     context: &'c StrokeContext,
     stats: DictionaryStatistics,
     hash_table: Vec<Option<usize>>,
-    buckets: Vec<Vec<BinaryDictionaryEntry>>,
+    buckets: Vec<Vec<BinaryDictionaryEntry<'c>>>,
     longest_outline_length: u8,
 }
 
 impl<'c> BinaryDictionaryCompiler<'c> {
     pub fn new(context: &'c StrokeContext) -> Self {
-        // let mut hash_table = Vec::with_capacity(HASH_TABLE_SIZE);
-        // // for _ in 0..HASH_TABLE_SIZE {
-        // //     hash_table.push(None);
-        // // }
-
         Self {
             stats: DictionaryStatistics::new(),
             context,
@@ -98,7 +93,7 @@ impl<'c> BinaryDictionaryCompiler<'c> {
 
     pub fn add(
         &mut self,
-        outline: Outline,
+        outline: Outline<'c>,
         commands: CommandList<TextOutputCommand>,
         tag: u16,
     ) -> Result<(), BinaryDictionaryEntryError> {
@@ -154,14 +149,14 @@ impl<'c> BinaryDictionaryCompiler<'c> {
 }
 
 #[derive(Debug)]
-pub enum BinaryDictionarySerializationError {
+pub enum BinaryDictionarySerializationError<'c> {
     IOError(crate::io::Error),
     ContextUnserializable(StringSerializationError),
-    EntryUnserializable(BinaryDictionaryEntrySerializationError),
+    EntryUnserializable(BinaryDictionaryEntrySerializationError<'c>),
 }
 
 impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
-    type Error = BinaryDictionarySerializationError;
+    type Error = BinaryDictionarySerializationError<'c>;
 
     fn serialize(&self, writer: &mut impl crate::io::Write) -> Result<(), Self::Error> {
         // -- Begin by remapping some data and calculating offsets
@@ -209,15 +204,21 @@ impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
                 .map_err(BinaryDictionarySerializationError::IOError)?;
         }
 
+        println!("Preamble: {}", writer.position());
+
         // Write the longest stroke length
         writer
             .write_u8(self.longest_outline_length)
             .map_err(BinaryDictionarySerializationError::IOError)?;
 
+        println!("Strokelen: {}", writer.position());
+
         // Write the StrokeContext
         self.context
             .serialize(&mut writer)
             .map_err(BinaryDictionarySerializationError::ContextUnserializable)?;
+
+        println!("StrokeCon: {}", writer.position());
 
         // Write the hash table
         let hash_table_data = hash_table.into_inner();
@@ -231,6 +232,8 @@ impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
                 .write_u8(byte)
                 .map_err(BinaryDictionarySerializationError::IOError)?;
         }
+
+        println!("HashTbl: {}", writer.position());
 
         // Write the bucket data
         let bucket_area_data = bucket_area.into_inner();

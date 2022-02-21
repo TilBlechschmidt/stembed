@@ -34,7 +34,7 @@ impl Deserialize for StrokeContext {
     type Context = ();
     type Error = StringSerializationError;
 
-    fn deserialize(reader: &mut impl Read, context: &Self::Context) -> Result<Self, Self::Error> {
+    fn deserialize(reader: &mut impl Read, context: Self::Context) -> Result<Self, Self::Error> {
         let left = SmolStr::deserialize(reader, context)?;
         let middle = SmolStr::deserialize(reader, context)?;
         let right = SmolStr::deserialize(reader, context)?;

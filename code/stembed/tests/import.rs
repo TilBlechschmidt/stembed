@@ -1,7 +1,7 @@
 use stembed::{
     compile::BinaryDictionaryCompiler,
     core::{
-        dict::BinaryDictionary,
+        dict::{BinaryDictionary, Dictionary},
         engine::Engine,
         processor::{text_formatter::TextFormatter, CommandProcessor},
         Stroke, StrokeContext,
@@ -31,12 +31,24 @@ fn plover() {
     println!("Dict size: {} bytes", dict_blob.stream_len().unwrap());
 
     let dictionary = BinaryDictionary::new(&mut dict_blob).unwrap();
-    let mut engine = Engine::new(dictionary);
+    println!(
+        "{} vs. {}",
+        dictionary.stroke_context().byte_count(),
+        context.byte_count()
+    );
+
+    println!("{:?}", dictionary.stroke_context());
+    println!("{:?}", dictionary.longest_outline_length());
+    println!(
+        "{:?}",
+        dictionary.lookup(&[Stroke::from_str("KPA*", &dictionary.stroke_context()).unwrap()])
+    );
+    let mut engine = Engine::new(&dictionary);
     let mut processor = TextFormatter::new();
 
     let strokes = "KPA*/H-L/WORLD/TP-BG/PO/TAEU/TOE/SADZ"
         .split('/')
-        .map(|stroke| Stroke::from_str(stroke, &context).unwrap());
+        .map(|stroke| Stroke::from_str(stroke, &dictionary.stroke_context()).unwrap());
 
     for stroke in strokes {
         println!("Stroke: {}", stroke);
