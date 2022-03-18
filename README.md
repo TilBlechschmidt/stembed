@@ -6,7 +6,7 @@ For more details, consult the [`docs/`](/docs) directory. This project is in a p
 
 ## FAQ
 
-- *Does this compete with Plover?* Kinda.
+- *Does this compete with Plover?* In a way. See below.
 - *Are you happy about this?* No.
 - *Is it necessary?* Unfortunately, yes.
 - *Would you be open to collaborating with Plover?* Absolutely! Although at this time I do not see a way of integrating this project with Plover which does not involve scrapping their current codebase. See below for more info.
