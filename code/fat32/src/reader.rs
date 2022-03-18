@@ -16,7 +16,7 @@ where
     file: File,
     filesystem: &'f Filesystem<E, RFut, RFn, WFut, WFn>,
     block_cache: (BlockID, Block),
-    cluster_cache: (u32, ClusterID),
+    cluster_cache: Option<[ClusterID; 103]>,
 }
 
 impl<'f, E, RFut, RFn, WFut, WFn> FileReader<'f, E, RFut, RFn, WFut, WFn>
@@ -30,10 +30,27 @@ where
     pub fn new(file: File, filesystem: &'f Filesystem<E, RFut, RFn, WFut, WFn>) -> Self {
         Self {
             block_cache: (BlockID::ZERO, Block::new([0; BLOCK_SIZE])),
-            cluster_cache: (0, file.cluster_address()),
+            cluster_cache: None,
             file,
             filesystem,
         }
+    }
+
+    pub async fn cache_fat(&mut self) -> Result<(), FilesystemError<E>> {
+        let cluster_chain = self.filesystem.cluster_chain(self.file.cluster_address());
+
+        pin_mut!(cluster_chain);
+
+        let mut cache = [self.file.cluster_address(); 103];
+        let mut cluster_count = 0;
+        while let Some(cluster_id) = cluster_chain.next().await {
+            cache[cluster_count] = cluster_id?;
+            cluster_count += 1;
+        }
+
+        self.cluster_cache = Some(cache);
+
+        Ok(())
     }
 
     pub async fn read(&mut self, offset: u32) -> Result<u8, FilesystemError<E>> {
@@ -49,8 +66,8 @@ where
         let intra_cluster_offset = vid.intra_cluster_offset(block_offset);
 
         // 2. Find ClusterID of the cluster containing our offset
-        let cluster_id = if self.cluster_cache.0 == cluster_offset {
-            self.cluster_cache.1
+        let cluster_id = if let Some(cache) = self.cluster_cache.as_ref() {
+            cache[cluster_offset as usize]
         } else {
             let cluster_chain = self
                 .filesystem
@@ -59,14 +76,10 @@ where
 
             pin_mut!(cluster_chain);
 
-            let cluster_id = cluster_chain
+            cluster_chain
                 .next()
                 .await
-                .ok_or(FilesystemError::OutOfBounds)??;
-
-            self.cluster_cache = (cluster_offset, cluster_id);
-
-            cluster_id
+                .ok_or(FilesystemError::OutOfBounds)??
         };
 
         // 3. Calculate BlockID of our data based on the ClusterID and the offset within the cluster

@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 futures = { version = "0.3", default-features = false }
+defmt = "0.3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

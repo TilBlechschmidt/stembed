@@ -44,6 +44,7 @@ impl<T, const N: usize> HistoryBuffer<T, N> {
         } else {
             None
         };
+
         self.data[self.write_at] = MaybeUninit::new(t);
 
         self.write_at += 1;
@@ -72,12 +73,33 @@ impl<T, const N: usize> HistoryBuffer<T, N> {
             Some(unsafe { self.data[self.write_at].assume_init_read() })
         }
     }
+
+    pub fn back(&self) -> Option<&T> {
+        if self.write_at == 0 {
+            if self.filled {
+                Some(unsafe { self.data[self.capacity() - 1].assume_init_ref() })
+            } else {
+                None
+            }
+        } else {
+            Some(unsafe { self.data[self.write_at - 1].assume_init_ref() })
+        }
+    }
 }
 
 // This is so precarious that we better write inline tests for it
 #[cfg(test)]
 mod does {
     use super::HistoryBuffer;
+
+    #[test]
+    fn peeks_correct_value() {
+        let mut buffer = HistoryBuffer::<u8, 2>::new();
+        for i in 0..10 {
+            buffer.push(i);
+            assert_eq!(buffer.back(), Some(&i));
+        }
+    }
 
     #[test]
     fn write_at_correct_locations() {

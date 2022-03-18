@@ -3,7 +3,7 @@ use crate::{
         engine::{Command, EngineCommand},
         processor::text_formatter::{AttachmentMode, CapitalizationMode, TextOutputCommand},
     },
-    serialize::{Deserialize, Serialize},
+    io::{Read, ReadExt, Write, WriteExt},
 };
 use alloc::{string::String, vec::Vec};
 
@@ -37,15 +37,13 @@ const ATTACHMENT_VARIANT_ALWAYS: u8 = 0b00001100;
 
 const TEXT_OUTPUT_LENGTH_MASK: u8 = 0b00001111;
 
-impl Serialize for Command<TextOutputCommand> {
-    type Error = crate::io::Error;
-
-    fn serialize(&self, writer: &mut impl crate::io::Write) -> Result<(), Self::Error> {
+impl Command<TextOutputCommand> {
+    pub async fn serialize(&self, writer: &mut impl Write) -> Result<(), crate::io::Error> {
         use AttachmentMode::*;
         use CapitalizationMode::*;
 
         match self {
-            Command::Engine(_) => writer.write_u8(COMMAND_VARIANT_ENGINE),
+            Command::Engine(_) => writer.write(COMMAND_VARIANT_ENGINE).await,
             Command::Output(command) => match command {
                 TextOutputCommand::Write(string) => {
                     // TODO Implement proper error handling
@@ -55,18 +53,22 @@ impl Serialize for Command<TextOutputCommand> {
                     let length_lower = (length & 0b11111111) as u8;
                     let length_upper = ((length & 0b111100000000) >> 8) as u8;
 
-                    writer.write_u8(COMMAND_VARIANT_OUTPUT | OUTPUT_VARIANT_TEXT | length_upper)?;
-                    writer.write_u8(length_lower)?;
+                    writer
+                        .write(COMMAND_VARIANT_OUTPUT | OUTPUT_VARIANT_TEXT | length_upper)
+                        .await?;
+                    writer.write(length_lower).await?;
 
                     for byte in string.as_bytes().into_iter() {
-                        writer.write_u8(*byte)?;
+                        writer.write(*byte).await?;
                     }
 
                     Ok(())
                 }
                 TextOutputCommand::ChangeDelimiter(delimiter) => {
-                    writer.write_u8(COMMAND_VARIANT_OUTPUT | OUTPUT_VARIANT_DELIMITER)?;
-                    writer.write_u32(*delimiter as u32)
+                    writer
+                        .write(COMMAND_VARIANT_OUTPUT | OUTPUT_VARIANT_DELIMITER)
+                        .await?;
+                    writer.write_u32(*delimiter as u32).await
                 }
                 TextOutputCommand::ChangeCapitalization(capitalization_mode) => {
                     let mode_bits = match capitalization_mode {
@@ -80,9 +82,9 @@ impl Serialize for Command<TextOutputCommand> {
                         CapitalizeNext => CAPITALIZATION_VARIANT_CAPIT_NEXT,
                     };
 
-                    writer.write_u8(
-                        COMMAND_VARIANT_OUTPUT | OUTPUT_VARIANT_CAPITALIZATION | mode_bits,
-                    )
+                    writer
+                        .write(COMMAND_VARIANT_OUTPUT | OUTPUT_VARIANT_CAPITALIZATION | mode_bits)
+                        .await
                 }
                 TextOutputCommand::ChangeAttachment(attachment_mode) => {
                     let mode_bits = match attachment_mode {
@@ -92,28 +94,24 @@ impl Serialize for Command<TextOutputCommand> {
                         Always => ATTACHMENT_VARIANT_ALWAYS,
                     };
 
-                    writer.write_u8(COMMAND_VARIANT_OUTPUT | OUTPUT_VARIANT_ATTACHMENT | mode_bits)
+                    writer
+                        .write(COMMAND_VARIANT_OUTPUT | OUTPUT_VARIANT_ATTACHMENT | mode_bits)
+                        .await
                 }
                 TextOutputCommand::ResetFormatting => {
-                    writer.write_u8(COMMAND_VARIANT_OUTPUT | OUTPUT_VARIANT_RESET)
+                    writer
+                        .write(COMMAND_VARIANT_OUTPUT | OUTPUT_VARIANT_RESET)
+                        .await
                 }
             },
         }
     }
-}
 
-impl Deserialize for Command<TextOutputCommand> {
-    type Context = ();
-    type Error = crate::io::Error;
-
-    fn deserialize(
-        reader: &mut impl crate::io::Read,
-        _context: Self::Context,
-    ) -> Result<Self, Self::Error> {
+    pub async fn deserialize(reader: &mut impl Read) -> Result<Self, crate::io::Error> {
         use AttachmentMode::*;
         use CapitalizationMode::*;
 
-        let data = reader.read_u8()?;
+        let data = reader.read().await?;
 
         match data & COMMAND_VARIANT_MASK {
             COMMAND_VARIANT_ENGINE => Ok(Command::Engine(EngineCommand::UndoPrevious)),
@@ -121,13 +119,13 @@ impl Deserialize for Command<TextOutputCommand> {
                 let output_command = match data & OUTPUT_VARIANT_MASK {
                     OUTPUT_VARIANT_TEXT => {
                         let mut length: u16 = ((data & TEXT_OUTPUT_LENGTH_MASK) as u16) << 8;
-                        length |= reader.read_u8()? as u16;
+                        length |= reader.read().await? as u16;
 
                         // Strings allocate anyways so we can just use Vec
                         let mut data = Vec::with_capacity(length as usize);
 
                         for _ in 0..length {
-                            data.push(reader.read_u8()?);
+                            data.push(reader.read().await?);
                         }
 
                         // TODO Implement proper error handling/propagation when encountering invalid UTF-8 data
@@ -136,7 +134,7 @@ impl Deserialize for Command<TextOutputCommand> {
                         )
                     }
                     OUTPUT_VARIANT_DELIMITER => {
-                        let delimiter_data = reader.read_u32()?;
+                        let delimiter_data = reader.read_u32().await?;
                         // TODO Implement proper error handling/propagation when encountering invalid UTF-8 data
                         let delimiter =
                             char::from_u32(delimiter_data).expect("encountered invalid UTF-8 data");

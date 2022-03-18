@@ -1,4 +1,3 @@
-use super::{Deserialize, Serialize};
 use crate::{
     core::{Stroke, StrokeContext},
     io::{self, Read, Write},
@@ -6,33 +5,26 @@ use crate::{
 use core::hash::{Hash, Hasher};
 use smallvec::SmallVec;
 
-impl<'c> Serialize for Stroke<'c> {
-    type Error = io::Error;
-
-    fn serialize(&self, writer: &mut impl Write) -> Result<(), Self::Error> {
+impl<'c> Stroke<'c> {
+    pub async fn serialize(&self, writer: &mut impl Write) -> Result<(), io::Error> {
         for byte in self.bit_vec.iter() {
-            writer.write_u8(*byte)?;
+            writer.write(*byte).await?;
         }
 
         Ok(())
     }
-}
 
-impl<'c> Deserialize for Stroke<'c> {
-    type Context = &'c StrokeContext;
-    type Error = io::Error;
-
-    fn deserialize(reader: &mut impl Read, context: Self::Context) -> Result<Self, Self::Error> {
+    pub async fn deserialize<'a>(
+        reader: &mut impl Read,
+        context: &'a StrokeContext,
+    ) -> Result<Stroke<'a>, io::Error> {
         let mut bit_vec = SmallVec::new();
 
         for _ in 0..context.byte_count() {
-            bit_vec.push(reader.read_u8()?);
+            bit_vec.push(reader.read().await?);
         }
 
-        Ok(Stroke {
-            bit_vec,
-            context: context,
-        })
+        Ok(Stroke { bit_vec, context })
     }
 }
 
@@ -41,7 +33,6 @@ impl<'c> Hash for Stroke<'c> {
     where
         H: Hasher,
     {
-        self.serialize(hasher)
-            .expect("unknown error while serializing into hasher");
+        hasher.write(self.bit_vec.as_slice());
     }
 }

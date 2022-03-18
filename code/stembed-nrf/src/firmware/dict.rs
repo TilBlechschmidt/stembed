@@ -1,6 +1,7 @@
 use core::marker::PhantomData;
 
 use alloc::string::ToString;
+use futures::Future;
 use smallvec::smallvec;
 use stembed::core::{
     dict::Dictionary, engine::Command, processor::text_formatter::TextOutputCommand, Stroke,
@@ -11,15 +12,23 @@ pub struct DummyDictionary<'c> {
     phantom: PhantomData<&'c ()>,
 }
 
+impl<'c> DummyDictionary<'c> {
+    pub fn new() -> Self {
+        Self {
+            phantom: PhantomData,
+        }
+    }
+}
+
 impl<'c> Dictionary for DummyDictionary<'c> {
     type Stroke = Stroke<'c>;
     type OutputCommand = TextOutputCommand;
+    type LookupFuture<'a> = impl Future<Output = Option<stembed::core::dict::CommandList<Self::OutputCommand>>> + 'a
+    where
+        Self: 'a;
 
-    fn lookup(
-        &self,
-        _outline: &[Self::Stroke],
-    ) -> Option<stembed::core::dict::CommandList<Self::OutputCommand>> {
-        None
+    fn lookup<'a>(&'a self, _outline: &'a [Self::Stroke]) -> Self::LookupFuture<'a> {
+        async move { None }
     }
 
     fn fallback_commands(
@@ -32,6 +41,6 @@ impl<'c> Dictionary for DummyDictionary<'c> {
     }
 
     fn longest_outline_length(&self) -> usize {
-        1
+        16
     }
 }

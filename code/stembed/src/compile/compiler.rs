@@ -1,18 +1,20 @@
 use crate::core::dict::binary::{
     calculate_bucket_index, BinaryDictionaryEntry, BinaryDictionaryEntryError, Outline,
 };
+use crate::io::{Write, WriteExt};
 use crate::serialize::BinaryDictionaryEntrySerializationError;
 use crate::{
     constants::{BINARY_DICT_PREAMBLE, HASH_TABLE_EMPTY_BUCKET, HASH_TABLE_SIZE},
     core::{dict::CommandList, processor::text_formatter::TextOutputCommand, StrokeContext},
-    io::{CountingWriter, HeapFile, Write},
-    serialize::{Serialize, StringSerializationError},
+    io::util::{CountingWriter, HeapFile},
+    serialize::StringSerializationError,
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 use core::fmt::{Debug, Display};
 
 pub struct DictionaryStatistics {
     occupancy: BTreeMap<usize, usize>,
+    stroke_length: BTreeMap<usize, usize>,
     collisions: usize,
     entries: usize,
     load: usize,
@@ -22,6 +24,7 @@ impl DictionaryStatistics {
     fn new() -> Self {
         Self {
             occupancy: BTreeMap::new(),
+            stroke_length: BTreeMap::new(),
             collisions: 0,
             entries: 0,
             load: 0,
@@ -68,6 +71,12 @@ impl Display for DictionaryStatistics {
             f.write_fmt(format_args!("      {} -> {}\n", key, value))?;
         }
 
+        f.write_str("    stroke length:\n")?;
+
+        for (key, value) in self.stroke_length.iter() {
+            f.write_fmt(format_args!("      {} -> {}\n", key, value))?;
+        }
+
         f.write_str("}}")
     }
 }
@@ -98,6 +107,11 @@ impl<'c> BinaryDictionaryCompiler<'c> {
         tag: u16,
     ) -> Result<(), BinaryDictionaryEntryError> {
         self.longest_outline_length = self.longest_outline_length.max(outline.len() as u8);
+        self.stats
+            .stroke_length
+            .entry(outline.len())
+            .and_modify(|x| *x += 1)
+            .or_insert(1);
 
         let bucket_index = calculate_bucket_index(&outline);
         let entry = BinaryDictionaryEntry::new(tag, outline, commands)?;
@@ -149,16 +163,17 @@ impl<'c> BinaryDictionaryCompiler<'c> {
 }
 
 #[derive(Debug)]
-pub enum BinaryDictionarySerializationError<'c> {
+pub enum BinaryDictionarySerializationError {
     IOError(crate::io::Error),
     ContextUnserializable(StringSerializationError),
-    EntryUnserializable(BinaryDictionaryEntrySerializationError<'c>),
+    EntryUnserializable(BinaryDictionaryEntrySerializationError),
 }
 
-impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
-    type Error = BinaryDictionarySerializationError<'c>;
-
-    fn serialize(&self, writer: &mut impl crate::io::Write) -> Result<(), Self::Error> {
+impl<'c> BinaryDictionaryCompiler<'c> {
+    pub async fn serialize(
+        &self,
+        writer: &mut impl crate::io::Write,
+    ) -> Result<(), BinaryDictionarySerializationError> {
         // -- Begin by remapping some data and calculating offsets
         let mut writer = CountingWriter::new(writer);
 
@@ -177,6 +192,7 @@ impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
                 for entry in bucket {
                     (*entry)
                         .serialize(&mut bucket_writer)
+                        .await
                         .map_err(BinaryDictionarySerializationError::EntryUnserializable)?;
                 }
             }
@@ -192,6 +208,7 @@ impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
 
             hash_table
                 .write_u32(bucket_pointer)
+                .await
                 .map_err(BinaryDictionarySerializationError::IOError)?;
         }
 
@@ -200,7 +217,8 @@ impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
         // Write the preamble
         for byte in BINARY_DICT_PREAMBLE {
             writer
-                .write_u8(*byte)
+                .write(*byte)
+                .await
                 .map_err(BinaryDictionarySerializationError::IOError)?;
         }
 
@@ -208,7 +226,8 @@ impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
 
         // Write the longest stroke length
         writer
-            .write_u8(self.longest_outline_length)
+            .write(self.longest_outline_length)
+            .await
             .map_err(BinaryDictionarySerializationError::IOError)?;
 
         println!("Strokelen: {}", writer.position());
@@ -216,6 +235,7 @@ impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
         // Write the StrokeContext
         self.context
             .serialize(&mut writer)
+            .await
             .map_err(BinaryDictionarySerializationError::ContextUnserializable)?;
 
         println!("StrokeCon: {}", writer.position());
@@ -229,7 +249,8 @@ impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
 
         for byte in hash_table_data {
             writer
-                .write_u8(byte)
+                .write(byte)
+                .await
                 .map_err(BinaryDictionarySerializationError::IOError)?;
         }
 
@@ -239,9 +260,11 @@ impl<'c> Serialize for BinaryDictionaryCompiler<'c> {
         let bucket_area_data = bucket_area.into_inner();
         for byte in bucket_area_data {
             writer
-                .write_u8(byte)
+                .write(byte)
+                .await
                 .map_err(BinaryDictionarySerializationError::IOError)?;
         }
+        println!("DataBlob: {}", writer.position());
 
         Ok(())
     }

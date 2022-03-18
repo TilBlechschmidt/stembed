@@ -1,12 +1,14 @@
+use defmt::Format;
+
 use crate::{Block, BlockCount, BlockID};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Format, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PartitionType {
     FAT32,
     Unknown,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub struct Partition {
     pub partition_type: PartitionType,
     pub block_address: BlockID,
@@ -44,12 +46,12 @@ impl From<&[u8]> for Partition {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub enum MasterBootRecordError {
     InvalidSignature,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub struct MasterBootRecord {
     pub partitions: [Partition; 4],
 }

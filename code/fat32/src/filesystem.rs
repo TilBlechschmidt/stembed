@@ -1,8 +1,9 @@
 use super::*;
 use core::future::Future;
+use defmt::Format;
 use futures::{pin_mut, Stream, StreamExt, TryStreamExt};
 
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub enum FilesystemError<E> {
     InvalidMasterBootRecord(MasterBootRecordError),
     InvalidVolumeId(VolumeIdError),
@@ -41,6 +42,8 @@ where
         let mbr = MasterBootRecord::try_from(mbr_block)
             .map_err(FilesystemError::InvalidMasterBootRecord)?;
 
+        defmt::trace!("mbr: {:?}", mbr);
+
         let fat_partition = mbr
             .partitions
             .iter()
@@ -55,6 +58,8 @@ where
 
                 let vid = VolumeId::try_from((partition.block_address, vid_block))
                     .map_err(FilesystemError::InvalidVolumeId)?;
+
+                defmt::trace!("vid: {:?}", vid);
 
                 Ok(Self {
                     read_fn,
@@ -74,6 +79,11 @@ where
             .map_err(FilesystemError::DiskFailure)
     }
 
+    /// Delegates to `read` but holds a cache of the most used FAT blocks
+    async fn read_fat(&self, address: BlockID) -> Result<Block, FilesystemError<E>> {
+        self.read(address).await
+    }
+
     async fn next_cluster(
         &self,
         current_cluster: ClusterID,
@@ -84,7 +94,7 @@ where
 
         let fat_address = self.vid.fat_address();
         let entry_address = fat_address + fat_entry_block_offset;
-        let entry_block = self.read(entry_address).await?;
+        let entry_block = self.read_fat(entry_address).await?;
 
         let next_entry = u32::from_le_bytes([
             entry_block[fat_entry_intra_block_offset],

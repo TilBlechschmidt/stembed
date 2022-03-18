@@ -1,61 +1,59 @@
-use smallvec::SmallVec;
-
 use crate::{
     core::{
         dict::binary::{BinaryDictionaryEntry, BinaryDictionaryEntryError},
         engine::Command,
-        processor::text_formatter::TextOutputCommand,
-        Stroke,
+        Stroke, StrokeContext,
     },
-    io,
+    io::{self, Read, ReadExt, Write, WriteExt},
 };
-
-use super::{Deserialize, Serialize};
+use smallvec::SmallVec;
 
 #[derive(Debug)]
-pub enum BinaryDictionaryEntrySerializationError<'c> {
+pub enum BinaryDictionaryEntrySerializationError {
     IOError(io::Error),
-    StrokeUnserializable(<Stroke<'c> as Serialize>::Error),
-    CommandUnserializable(<Command<TextOutputCommand> as Serialize>::Error),
+    StrokeUnserializable(io::Error),
+    CommandUnserializable(io::Error),
     InvalidData(BinaryDictionaryEntryError),
 }
 
-impl<'c> Serialize for BinaryDictionaryEntry<'c> {
-    type Error = BinaryDictionaryEntrySerializationError<'c>;
-
-    fn serialize(&self, writer: &mut impl io::Write) -> Result<(), Self::Error> {
+impl<'c> BinaryDictionaryEntry<'c> {
+    pub async fn serialize(
+        &self,
+        writer: &mut impl Write,
+    ) -> Result<(), BinaryDictionaryEntrySerializationError> {
         let mut info: u16 = 0;
         info |= (self.tag() & 0b11111) << 11;
         info |= ((self.outline().len() as u16) & 0b11111) << 6;
         info |= (self.commands().len() as u16) & 0b111111;
-        writer.write_u16(info).map_err(Self::Error::IOError)?;
+        writer
+            .write_u16(info)
+            .await
+            .map_err(BinaryDictionaryEntrySerializationError::IOError)?;
 
         for stroke in self.outline().iter() {
             stroke
                 .serialize(writer)
-                .map_err(Self::Error::StrokeUnserializable)?;
+                .await
+                .map_err(BinaryDictionaryEntrySerializationError::StrokeUnserializable)?;
         }
 
         for command in self.commands().iter() {
             command
                 .serialize(writer)
-                .map_err(Self::Error::CommandUnserializable)?;
+                .await
+                .map_err(BinaryDictionaryEntrySerializationError::CommandUnserializable)?;
         }
 
         Ok(())
     }
-}
 
-impl<'c> Deserialize for BinaryDictionaryEntry<'c> {
-    type Context = <Stroke<'c> as Deserialize>::Context;
-    type Error = BinaryDictionaryEntrySerializationError<'c>;
-
-    fn deserialize(
-        reader: &mut impl io::Read,
-        context: Self::Context,
-    ) -> Result<Self, Self::Error> {
+    pub async fn deserialize(
+        reader: &mut impl Read,
+        context: &'c StrokeContext,
+    ) -> Result<BinaryDictionaryEntry<'c>, BinaryDictionaryEntrySerializationError> {
         let info = reader
             .read_u16()
+            .await
             .map_err(BinaryDictionaryEntrySerializationError::IOError)?;
         let tag = info >> 11;
         let stroke_count = (info >> 6) & 0b11111;
@@ -65,6 +63,7 @@ impl<'c> Deserialize for BinaryDictionaryEntry<'c> {
         for _ in 0..stroke_count {
             outline.push(
                 Stroke::deserialize(reader, context)
+                    .await
                     .map_err(BinaryDictionaryEntrySerializationError::IOError)?,
             );
         }
@@ -72,7 +71,8 @@ impl<'c> Deserialize for BinaryDictionaryEntry<'c> {
         let mut commands = SmallVec::new();
         for _ in 0..command_count {
             commands.push(
-                Command::deserialize(reader, ())
+                Command::deserialize(reader)
+                    .await
                     .map_err(BinaryDictionaryEntrySerializationError::IOError)?,
             );
         }
@@ -86,8 +86,7 @@ impl<'c> Deserialize for BinaryDictionaryEntry<'c> {
 mod does {
     use crate::{
         core::{dict::binary::BinaryDictionaryEntry, Stroke, StrokeContext},
-        io::{HeapFile, Seek, SeekFrom},
-        serialize::{Deserialize, Serialize},
+        io::{util::HeapFile, Seek, SeekFrom},
     };
     use smallvec::smallvec;
 
@@ -99,9 +98,10 @@ mod does {
         let entry = BinaryDictionaryEntry::new(16, smallvec![stroke], smallvec![]).unwrap();
 
         let mut buf = HeapFile::new();
-        entry.serialize(&mut buf).unwrap();
-        buf.seek(SeekFrom::Start(0)).unwrap();
-        let deserialized = BinaryDictionaryEntry::deserialize(&mut buf, &context).unwrap();
+        smol::block_on(entry.serialize(&mut buf)).unwrap();
+        smol::block_on(buf.seek(SeekFrom::Start(0))).unwrap();
+        let deserialized =
+            smol::block_on(BinaryDictionaryEntry::deserialize(&mut buf, &context)).unwrap();
 
         assert_eq!(entry.outline(), deserialized.outline());
     }

@@ -12,7 +12,7 @@ pub use context::*;
 /// that was used to construct it. This will be used when using e.g. `.to_string()`.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Stroke<'c> {
-    pub(crate) bit_vec: SmallVec<[u8; AVG_STROKE_BIT_COUNT / 8]>,
+    pub/*(crate)*/ bit_vec: SmallVec<[u8; AVG_STROKE_BIT_COUNT / 8]>,
     pub(crate) context: &'c StrokeContext,
 }
 

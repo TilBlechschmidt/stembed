@@ -3,6 +3,8 @@ use core::{
     ops::{Add, Deref, Div, Mul, Rem, Sub},
 };
 
+use defmt::Format;
+
 pub const BLOCK_SIZE: usize = 512;
 
 pub struct Block {
@@ -23,10 +25,10 @@ impl Deref for Block {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Format)]
 pub struct BlockID(pub(crate) u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Format)]
 pub struct BlockCount(pub(crate) u32);
 
 impl BlockID {
@@ -34,6 +36,10 @@ impl BlockID {
 
     pub fn offset(self) -> usize {
         self.0 as usize * BLOCK_SIZE
+    }
+
+    pub fn into_inner(self) -> u32 {
+        self.0
     }
 }
 
@@ -99,7 +105,7 @@ impl Mul for BlockCount {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub enum BlockDeviceError<E> {
     DeviceError(E),
     OutOfBounds,

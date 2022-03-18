@@ -1,3 +1,5 @@
+use defmt::Format;
+
 use crate::{ClusterID, BLOCK_SIZE};
 
 const ENTRY_TYPE_LONG_NAME_MASK: u8 = 0b00001111;
@@ -6,10 +8,10 @@ const ENTRY_TYPE_VOLUME_ID_MASK: u8 = 0b00001000;
 pub(crate) const DIRECTORY_ENTRY_SIZE: usize = 32;
 pub(crate) const DIRECTORY_ENTRIES_PER_BLOCK: usize = BLOCK_SIZE / DIRECTORY_ENTRY_SIZE;
 
-#[derive(PartialEq)]
+#[derive(Format, PartialEq)]
 pub struct Name([u8; 11]);
 
-#[derive(Debug, PartialEq)]
+#[derive(Format, Debug, PartialEq)]
 pub struct File {
     name: Name,
     attributes: u8,
@@ -17,13 +19,13 @@ pub struct File {
     size: u32,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Format, Debug, PartialEq)]
 pub struct Directory {
     pub(crate) name: Name,
     pub(crate) cluster: ClusterID,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Format, Debug, PartialEq)]
 pub enum DirectoryEntry {
     Directory(Directory),
     File(File),

@@ -5,6 +5,7 @@
     "rust-analyzer.linkedProjects": [
         "code/stembed/Cargo.toml",
         "code/stembed-cli/Cargo.toml",
-        "code/stembed-nrf/Cargo.toml"
+        "code/stembed-nrf/Cargo.toml",
+        "code/fat32/Cargo.toml"
     ]
 }

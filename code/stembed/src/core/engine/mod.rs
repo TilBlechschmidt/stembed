@@ -1,4 +1,4 @@
-use super::dict::DictExt;
+use super::dict::{Dictionary, DictionaryHandler};
 use crate::constants::{AVG_OUTLINE_RATIO, AVG_STROKE_COUNT, HISTORY_SIZE};
 use smallvec::SmallVec;
 
@@ -11,39 +11,44 @@ pub use outline::*;
 mod buffer;
 pub use buffer::HistoryBuffer;
 
-pub struct Engine<'d, D>
+pub struct Engine<D>
 where
-    D: DictExt,
+    D: Dictionary,
     D::Stroke: Clone,
 {
     history: HistoryBuffer<MatchedOutline<D::Stroke>, HISTORY_SIZE>,
-    dictionary: &'d D,
+    dictionary: DictionaryHandler<D>,
 }
 
-impl<'d, D> Engine<'d, D>
+impl<D> Engine<D>
 where
-    D: DictExt,
+    D: Dictionary,
     D::Stroke: Clone + core::fmt::Debug,
 {
-    pub fn new(dictionary: &'d D) -> Self {
+    pub fn new(dictionary: D) -> Self {
         Self {
             history: HistoryBuffer::new(),
-            dictionary,
+            dictionary: DictionaryHandler::new(dictionary),
         }
     }
 
-    pub fn push(&mut self, stroke: D::Stroke) -> CommandDelta<D::OutputCommand> {
-        self.mutate_stroke_history(|strokes| strokes.push(stroke)).0
+    pub async fn push(&mut self, stroke: D::Stroke) -> CommandDelta<D::OutputCommand> {
+        self.mutate_stroke_history(|strokes| strokes.push(stroke))
+            .await
+            .0
     }
 
-    pub fn pop(&mut self) -> Option<(CommandDelta<D::OutputCommand>, D::Stroke)> {
-        match self.mutate_stroke_history(|strokes| strokes.pop()) {
+    pub async fn pop(&mut self) -> Option<(CommandDelta<D::OutputCommand>, D::Stroke)> {
+        match self.mutate_stroke_history(|strokes| strokes.pop()).await {
             (instructions, Some(stroke)) => Some((instructions, stroke)),
             (_, None) => None,
         }
     }
 
-    fn mutate_stroke_history<M, R>(&mut self, mutator: M) -> (CommandDelta<D::OutputCommand>, R)
+    async fn mutate_stroke_history<M, R>(
+        &mut self,
+        mutator: M,
+    ) -> (CommandDelta<D::OutputCommand>, R)
     where
         M: FnOnce(&mut SmallVec<[D::Stroke; AVG_OUTLINE_RATIO * AVG_STROKE_COUNT]>) -> R,
     {
@@ -82,7 +87,7 @@ where
         // Re-match the newly built stroke array
         let new_outlines: SmallVec<
             [FetchedOutline<'_, D::Stroke, D::OutputCommand>; AVG_OUTLINE_RATIO],
-        > = self.dictionary.find_outlines(&strokes);
+        > = self.dictionary.find_outlines(&strokes).await;
 
         // Run through `old_outlines` and `new_outlines` simultaneously and compare along the way.
         // When we hit the "diversion point", undo all remaining old_outlines and apply all new outlines.
@@ -104,7 +109,7 @@ where
             } else {
                 // They diverged! Undo the old one, apply the new one.
                 output.to_undo += old.command_count as usize;
-                self.add_new_outline(new, &mut output);
+                self.add_new_outline(new, &mut output).await;
             }
         }
 
@@ -114,7 +119,7 @@ where
         }
 
         for new in new_iter {
-            self.add_new_outline(new, &mut output);
+            self.add_new_outline(new, &mut output).await;
         }
 
         // PROFIT! :D
@@ -123,15 +128,16 @@ where
 
     /// Helper function which processes a new outline, executes its EngineCommands,
     /// collects its OutputCommands, and pushes it onto the history stack
-    fn add_new_outline(
+    async fn add_new_outline(
         &mut self,
-        new: FetchedOutline<D::Stroke, D::OutputCommand>,
+        new: FetchedOutline<'_, D::Stroke, D::OutputCommand>,
         output: &mut CommandDelta<D::OutputCommand>,
     ) {
         // Execute the commands and count the number out output commands
-        let command_count = new.commands.into_iter().fold(0, |acc, command| {
-            acc + self.execute(command, output) as usize
-        });
+        let mut command_count = 0;
+        for command in new.commands {
+            command_count += self.execute(command, output).await as usize;
+        }
 
         // Treat "empty" commands (mostly EngineCommands) as non-existent in terms of the stroke history
         if command_count > 0 {
@@ -142,7 +148,7 @@ where
 
     /// Helper function which executes a command and/or adds its instructions to the output.
     /// Returns whether the command was an OutputCommand that has been forwarded.
-    fn execute(
+    async fn execute(
         &mut self,
         command: Command<D::OutputCommand>,
         output: &mut CommandDelta<D::OutputCommand>,
@@ -153,10 +159,11 @@ where
                 true
             }
             Command::Engine(EngineCommand::UndoPrevious) => {
-                if let Some((instructions, _)) = self.pop() {
-                    output.assimilate(instructions);
-                }
-                false
+                unimplemented!("Non-recursive implementation for undo missing");
+                // if let Some((instructions, _)) = self.pop().await {
+                //     output.assimilate(instructions);
+                // }
+                // false
             }
         }
     }

@@ -1,4 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![feature(generic_associated_types)]
+#![feature(type_alias_impl_trait)]
 
 #[macro_use]
 extern crate alloc;

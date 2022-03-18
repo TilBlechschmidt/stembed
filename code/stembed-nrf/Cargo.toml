@@ -24,11 +24,10 @@ alloc-cortex-m = "0.4.2"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 
+fat32 = { path = "../fat32" }
 stembed = { path = "../stembed", default-features = false }
 smallvec = "1.8"
 
-
-embedded-sdmmc = { git = "https://github.com/rust-embedded-community/embedded-sdmmc-rs", features = ["defmt-log"], default-features = false }
 nrf52840-hal = "0.15"
 
 [profile.dev]

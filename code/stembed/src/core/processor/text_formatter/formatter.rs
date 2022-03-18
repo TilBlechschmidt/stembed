@@ -1,7 +1,9 @@
 use super::super::{CommandProcessor, OutputInstructionSet};
 use super::{TextFormatterState, TextOutputCommand, TextOutputInstruction};
-use crate::core::engine::CommandDelta;
-use alloc::collections::VecDeque;
+use crate::constants::{AVG_OUTPUT_INSTRUCTIONS, HISTORY_SIZE};
+use crate::core::engine::{CommandDelta, HistoryBuffer};
+
+const COMMAND_HISTORY_SIZE: usize = HISTORY_SIZE * AVG_OUTPUT_INSTRUCTIONS;
 
 struct UndoInfo {
     character_count: usize,
@@ -13,19 +15,19 @@ impl UndoInfo {
 
 pub struct TextFormatter {
     // TODO Use the same alloc-less history buffer data type as in the Engine
-    history: VecDeque<(TextFormatterState, UndoInfo)>,
+    history: HistoryBuffer<(TextFormatterState, UndoInfo), COMMAND_HISTORY_SIZE>,
 }
 
 impl TextFormatter {
     pub fn new() -> Self {
         Self {
-            history: VecDeque::new(),
+            history: HistoryBuffer::new(),
         }
     }
 
     fn undo(&mut self) -> Option<TextOutputInstruction> {
         self.history
-            .pop_back()
+            .pop()
             .map(|(_, undo_info)| TextOutputInstruction::Backspace(undo_info.character_count))
     }
 
@@ -67,7 +69,7 @@ impl TextFormatter {
             }
         };
 
-        self.history.push_back((state, undo_info));
+        self.history.push((state, undo_info));
 
         output
     }

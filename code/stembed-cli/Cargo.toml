@@ -7,3 +7,4 @@ authors = ["Til Blechschmidt <til@blechschmidt.dev>"]
 [dependencies]
 stembed = { path = "../stembed", features = ["import", "compile", "serial", "desktop"] }
 clap = { version = "3.0", features = ["derive"] }
+smol = "1.2.5"

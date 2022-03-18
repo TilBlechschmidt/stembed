@@ -1,16 +1,18 @@
+use defmt::Format;
+
 use crate::{Block, BlockCount, BlockID, BLOCK_SIZE};
 use core::ops::Sub;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Format, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClusterID(pub(crate) u32);
 
-#[derive(Debug)]
+#[derive(Format, Debug)]
 pub enum VolumeIdError {
     InvalidBlockSize,
     InvalidSignature,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Format)]
 pub struct VolumeId {
     partition_address: BlockID,
 
@@ -64,9 +66,15 @@ impl TryFrom<(BlockID, Block)> for VolumeId {
     type Error = VolumeIdError;
 
     fn try_from((partition_address, block): (BlockID, Block)) -> Result<Self, Self::Error> {
+        defmt::trace!("{:?}", *block);
         let sector_size = u16::from_le_bytes([block[0x0B], block[0x0B + 1]]);
 
         if sector_size != BLOCK_SIZE as u16 {
+            defmt::warn!(
+                "Expected block size of {} did not match actual {}",
+                BLOCK_SIZE,
+                sector_size
+            );
             return Err(VolumeIdError::InvalidBlockSize);
         }
 
