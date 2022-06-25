@@ -1,0 +1,25 @@
+[package]
+name = "shittyengine"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+alloc = []
+compile = ["alloc", "combine"]
+desktop = ["alloc", "core-graphics", "x11", "winapi"]
+
+[dependencies]
+arrayvec = { version = "0.7.2", default-features = false }
+combine = { version = "4.6.4", default-features = false, optional = true }
+
+# OS input dependencies below
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = { version = "0.19.0", features = ["highsierra"], optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11 = { version = "2.18.1", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3.4", features = ["libloaderapi", "minwindef", "winbase", "winuser"], optional = true }
