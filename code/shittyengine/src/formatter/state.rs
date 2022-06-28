@@ -22,7 +22,7 @@ impl Default for TextFormatterState {
     fn default() -> Self {
         Self {
             attachment: AttachmentMode::Next,
-            capitalization: CapitalizationMode::Unchanged,
+            capitalization: CapitalizationMode::CapitalizeNext,
         }
     }
 }

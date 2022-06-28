@@ -1,9 +1,9 @@
 use super::{find_longest_matching_prefix, Dictionary, OutlineMatch};
 use crate::formatter::FormatterCommand;
-use alloc::{collections::BTreeMap, vec::Vec};
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
 pub struct InMemoryDictionary<'c, Stroke> {
-    entries: BTreeMap<Vec<Stroke>, Vec<FormatterCommand<'c>>>,
+    entries: BTreeMap<Vec<Stroke>, Vec<FormatterCommand<String>>>,
     longest_outline: usize,
 }
 
@@ -18,8 +18,8 @@ impl<'c, Stroke: Ord> InMemoryDictionary<'c, Stroke> {
     pub fn add(
         &mut self,
         outline: Vec<Stroke>,
-        commands: Vec<FormatterCommand<'c>>,
-    ) -> Option<Vec<FormatterCommand<'c>>> {
+        commands: Vec<FormatterCommand<String>>,
+    ) -> Option<Vec<FormatterCommand<String>>> {
         assert!(
             outline.len() < u8::MAX as usize,
             "only outlines with less than 256 strokes are supported"
@@ -39,13 +39,15 @@ impl<'c, Stroke: Ord> Default for InMemoryDictionary<'c, Stroke> {
     }
 }
 
-impl<'c, Stroke: Ord + Clone> Dictionary<'c> for InMemoryDictionary<'c, Stroke> {
+impl<'c, Stroke: Ord + Clone> Dictionary for InMemoryDictionary<'c, Stroke> {
     type Stroke = Stroke;
+    type StringData = String;
+    type CommandIter = alloc::slice::Iter<'c, FormatterCommand<Self::StringData>>;
 
     fn match_prefix<'s>(
         &'c mut self,
         strokes: impl Iterator<Item = &'s Self::Stroke> + Clone,
-    ) -> Option<OutlineMatch<'c>>
+    ) -> Option<OutlineMatch<Self::StringData, Self::CommandIter>>
     where
         Self::Stroke: 's,
     {

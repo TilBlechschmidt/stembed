@@ -77,6 +77,10 @@ impl TreeNode {
             self.prefix_length < u8::MAX as usize,
             "encountered node with prefix length larger than 255"
         );
+        // assert_ne!(
+        //     self.prefix_length, 0,
+        //     "encountered node with a prefix length of zero"
+        // );
 
         // Store the number of children, offset by one as empty nodes are disallowed
         buffer.push((self.children.len() - 1) as u8);
@@ -106,9 +110,6 @@ impl TreeNode {
 
         // Build the prefix/key array
         for (prefix, _) in &self.children {
-            // TODO This fails and it is unacceptable for this to fail.
-            //      The reason is probably that a node contains mostly children with length X
-            //      but there is that one child which only has Y bytes remaining where Y < X.
             assert_eq!(
                 prefix.len(),
                 self.prefix_length,
@@ -141,7 +142,7 @@ impl TreeNode {
                     buffer[pointer_array_start + i * 3 + 2] = data_location[3];
                 }
                 Child::Tree(node) => {
-                    let child_location = buffer.len().to_be_bytes();
+                    let child_location = (buffer.len() as u32).to_be_bytes();
                     buffer[pointer_array_start + i * 3 + 0] = child_location[1];
                     buffer[pointer_array_start + i * 3 + 1] = child_location[2];
                     buffer[pointer_array_start + i * 3 + 2] = child_location[3];
@@ -200,6 +201,8 @@ fn calculate_prefix_length(entries: &Vec<(Vec<u8>, CommandList)>) -> usize {
     let max_prefix_length = entries
         .iter()
         .map(|(bytes, _)| bytes.len())
+        // Excludes entries with a prefix length of zero (those that make up the intermediate leaf data)
+        .filter(|i| *i > 0)
         .min()
         .unwrap_or(1);
 

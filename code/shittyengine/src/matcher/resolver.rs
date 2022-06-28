@@ -39,6 +39,13 @@ impl<'s, Stroke, const HISTORY_SIZE: usize> Deref for TrailingOutline<'s, Stroke
     }
 }
 
+pub enum CommitType {
+    /// The requested commit has been executed normally and the related commands should be applied
+    Regular,
+    /// The requested commit matched a previously applied one exactly and was fast forwarded. Related commands may NOT be applied again!
+    FastForward,
+}
+
 /// Tool to drive the [`State`](super::State) into a resolved state with all strokes matched
 pub struct StateResolver;
 
@@ -51,14 +58,22 @@ impl StateResolver {
     /// You have to handle the returned error, otherwise the resolver will just throw it over and over again.
     pub fn commit<'s, Stroke, const HISTORY_SIZE: usize>(
         &self,
-        prefix_length: u8,
-        command_count: u8,
+        prefix_length: usize,
+        command_count: usize,
         state: &'s mut State<Stroke, HISTORY_SIZE>,
-    ) -> Result<(), TrailingOutline<'s, Stroke, HISTORY_SIZE>> {
+    ) -> Result<CommitType, TrailingOutline<'s, Stroke, HISTORY_SIZE>> {
         // Sanity-check the inputs
-        if prefix_length == 0 || state.uncommitted_count < prefix_length as usize {
+        if prefix_length == 0 || state.uncommitted_count < prefix_length {
             panic!("invalid prefix length, not enough uncommitted strokes present to fit")
         }
+
+        let prefix_length_u8: u8 = prefix_length
+            .try_into()
+            .expect("attempted to commit prefix longer than 256");
+
+        let command_count_u8: u8 = command_count
+            .try_into()
+            .expect("attempted to commit more than 256 commands");
 
         // Check if the prefix length matches an already present outline exactly and commit it if applicable.
         // This allows commits that will not change the outline information even with trailing outlines present,
@@ -66,11 +81,11 @@ impl StateResolver {
         if state
             .stroke_from_back(state.uncommitted_count - 1)
             .and_then(|stroke| stroke.outline.as_ref())
-            .map(|outline| outline.length == prefix_length)
+            .map(|outline| outline.length == prefix_length_u8)
             .unwrap_or(false)
         {
-            state.uncommitted_count -= prefix_length as usize;
-            return Ok(());
+            state.uncommitted_count -= prefix_length;
+            return Ok(CommitType::FastForward);
         }
 
         // Bail if we have a trailing outline that has to be removed first
@@ -81,11 +96,11 @@ impl StateResolver {
         // Apply the commit by storing the outline information and adjusting the uncommitted count
         if let Some(stroke) = &mut state.stroke_from_back(state.uncommitted_count - 1) {
             stroke.outline = Some(OutlineInformation {
-                length: prefix_length,
-                commands: command_count,
+                length: prefix_length_u8,
+                commands: command_count_u8,
             });
-            state.uncommitted_count -= prefix_length as usize;
-            return Ok(());
+            state.uncommitted_count -= prefix_length;
+            return Ok(CommitType::Regular);
         }
 
         panic!("attempted to commit on inconsistent state")

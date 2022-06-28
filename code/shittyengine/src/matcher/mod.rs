@@ -11,7 +11,7 @@ use resolver::StateResolver;
 use state::State;
 
 pub use entry::{HistoryEntry, OutlineInformation};
-pub use resolver::TrailingOutline;
+pub use resolver::{CommitType, TrailingOutline};
 
 // Wrapper around all the lower-level structs to make the API more concise
 pub struct OutlineMatcher<Stroke, const HISTORY_SIZE: usize> {
@@ -39,18 +39,22 @@ impl<Stroke, const HISTORY_SIZE: usize> OutlineMatcher<Stroke, HISTORY_SIZE> {
 
     pub fn commit(
         &mut self,
-        prefix_length: u8,
-        command_count: u8,
-    ) -> Result<(), TrailingOutline<'_, Stroke, HISTORY_SIZE>> {
+        prefix_length: usize,
+        command_count: usize,
+    ) -> Result<CommitType, TrailingOutline<'_, Stroke, HISTORY_SIZE>> {
         self.resolver
             .commit(prefix_length, command_count, &mut self.state)
     }
 
-    pub fn uncommitted_strokes(&mut self) -> impl Iterator<Item = &Stroke> {
+    pub fn uncommitted_count(&self) -> usize {
+        self.state.uncommitted_count
+    }
+
+    pub fn uncommitted_strokes(&mut self) -> impl Iterator<Item = &Stroke> + Clone {
         self.state.uncommitted_strokes()
     }
 
-    pub fn committed_strokes(&mut self) -> impl Iterator<Item = &HistoryEntry<Stroke>> {
+    pub fn committed_strokes(&mut self) -> impl Iterator<Item = &HistoryEntry<Stroke>> + Clone {
         self.state.committed_strokes()
     }
 }

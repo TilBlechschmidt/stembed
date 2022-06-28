@@ -1,12 +1,11 @@
 //! Data structures to construct a deduplicated binary blob containing all translations
 
 use super::json::CommandList;
-use crate::formatter::{AttachmentMode, CapitalizationMode, GenericFormatterCommand};
+use crate::formatter::{AttachmentMode, CapitalizationMode, FormatterCommand};
 use crate::TRANSLATION_SIZE_LIMIT;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::fmt::Display;
-use core::ops::Deref;
 
 pub struct TranslationPointers<'a> {
     pointers: BTreeMap<&'a CommandList, usize>,
@@ -52,23 +51,24 @@ impl CommandList {
     }
 }
 
-impl<S: Deref<Target = str> + Display> GenericFormatterCommand<S> {
+impl<S: AsRef<str> + Display> FormatterCommand<S> {
     fn to_bytes(&self) -> Vec<u8> {
         use AttachmentMode::*;
         use CapitalizationMode::*;
-        use GenericFormatterCommand::*;
+        use FormatterCommand::*;
 
         let mut string_data = None;
         let mut data = Vec::<u8>::new();
 
         data.push(match self {
             Write(string) => {
+                let string = string.as_ref();
                 assert!(
                     string.len() < 2usize.pow(6),
                     "strings longer than 63 characters are currently not supported (processing '{string}')"
                 );
                 string_data = Some(string);
-                0b00 | (string.len() as u8)
+                0b00_000000 | (string.len() as u8)
             }
 
             ChangeCapitalization(Unchanged) => 0b01_000_000,

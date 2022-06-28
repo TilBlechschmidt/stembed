@@ -1,4 +1,4 @@
-use core::fmt::{Display, Write};
+use core::fmt::{Debug, Display, Write};
 
 #[rustfmt::skip]
 const KEYMAP: [char; 23] = [
@@ -58,6 +58,12 @@ impl Display for EnglishStroke {
         }
 
         Ok(())
+    }
+}
+
+impl Debug for EnglishStroke {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        (self as &dyn Display).fmt(f)
     }
 }
 

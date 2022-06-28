@@ -1,13 +1,6 @@
-/// Formatter command containing a reference to a string allocated elsewhere
-pub type FormatterCommand<'s> = GenericFormatterCommand<&'s str>;
-
-/// Formatter command owning its heap allocated string contents
-#[cfg(feature = "alloc")]
-pub type OwnedFormatterCommand = GenericFormatterCommand<alloc::string::String>;
-
 /// Formatter command which is generic over the type of string data it contains
 #[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
-pub enum GenericFormatterCommand<S> {
+pub enum FormatterCommand<S: AsRef<str>> {
     Write(S),
     ChangeCapitalization(CapitalizationMode),
     ChangeAttachment(AttachmentMode),

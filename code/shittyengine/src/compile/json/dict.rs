@@ -1,6 +1,7 @@
 use super::stroke;
-use crate::formatter::{AttachmentMode, CapitalizationMode, OwnedFormatterCommand};
+use crate::formatter::{AttachmentMode, CapitalizationMode, FormatterCommand};
 use crate::Stroke;
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use combine::{
@@ -16,7 +17,8 @@ use combine::{
 use core::fmt::{Display, Write};
 use core::ops::Deref;
 
-/// Owned and heap allocated version of [`dict::OutlineMatch::commands`](crate::dict::OutlineMatch::commands)
+type OwnedFormatterCommand = FormatterCommand<String>;
+
 #[repr(transparent)]
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct CommandList(pub Vec<OwnedFormatterCommand>);

@@ -1,13 +1,11 @@
 extern crate alloc;
-
-use std::collections::HashSet;
-use std::fmt::Write;
-
 use alloc::collections::BTreeMap;
 use shittyengine::{
     compile::{Child, Compiler, TreeNode},
-    formatter::OwnedFormatterCommand,
+    formatter::FormatterCommand,
 };
+use std::collections::HashSet;
+use std::fmt::Write;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = "/Users/tibl/Library/Application Support/plover/main.json";
@@ -18,9 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{info}");
     println!("total bytes: {}", buffer.len());
 
-    // TODO Build statistics over the fetch behaviour
-
-    std::fs::write("./dict.bin", buffer)?;
+    std::fs::write("./dict.bin", &buffer)?;
 
     Ok(())
 }
@@ -43,7 +39,7 @@ struct TreeInfo {
     leaf_child_counts: BTreeMap<usize, Vec<usize>>,
     cumulative_leaf_nodes: BTreeMap<usize, usize>,
 
-    seen_translations: HashSet<Vec<OwnedFormatterCommand>>,
+    seen_translations: HashSet<Vec<FormatterCommand<String>>>,
 }
 
 impl TreeInfo {
@@ -125,16 +121,16 @@ impl TreeInfo {
         map
     }
 
-    fn track_leaf_data_usage(&mut self, data: &Vec<OwnedFormatterCommand>) {
+    fn track_leaf_data_usage(&mut self, data: &Vec<FormatterCommand<String>>) {
         if self.seen_translations.insert(data.clone()) {
             for entry in data {
                 self.estimated_size.leaf_data += match entry {
-                    shittyengine::formatter::GenericFormatterCommand::Write(string) => {
+                    shittyengine::formatter::FormatterCommand::Write(string) => {
                         string.as_bytes().len() + 1
                     }
-                    shittyengine::formatter::GenericFormatterCommand::ChangeCapitalization(_) => 1,
-                    shittyengine::formatter::GenericFormatterCommand::ChangeAttachment(_) => 1,
-                    shittyengine::formatter::GenericFormatterCommand::ResetFormatting => 1,
+                    shittyengine::formatter::FormatterCommand::ChangeCapitalization(_) => 1,
+                    shittyengine::formatter::FormatterCommand::ChangeAttachment(_) => 1,
+                    shittyengine::formatter::FormatterCommand::ResetFormatting => 1,
                 }
             }
 

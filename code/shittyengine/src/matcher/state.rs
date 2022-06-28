@@ -17,14 +17,14 @@ impl<Stroke, const HISTORY_SIZE: usize> State<Stroke, HISTORY_SIZE> {
 
     /// Returns an iterator over the uncommited strokes
     // No outline information is exposed because it may be invalid
-    pub fn uncommitted_strokes(&mut self) -> impl Iterator<Item = &Stroke> {
+    pub fn uncommitted_strokes(&mut self) -> impl Iterator<Item = &Stroke> + Clone {
         (0..self.uncommitted_count)
             .rev()
             .map(|i| &self.strokes[i].stroke)
     }
 
     /// Returns a slice of committed strokes
-    pub fn committed_strokes(&mut self) -> impl Iterator<Item = &HistoryEntry<Stroke>> {
+    pub fn committed_strokes(&mut self) -> impl Iterator<Item = &HistoryEntry<Stroke>> + Clone {
         (self.uncommitted_count..self.strokes.len())
             .rev()
             .map(|i| &self.strokes[i])

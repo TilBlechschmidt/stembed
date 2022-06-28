@@ -55,17 +55,17 @@ impl<const HISTORY_SIZE: usize> Formatter<HISTORY_SIZE> {
         })
     }
 
-    pub fn apply<'a>(
-        &'a mut self,
-        command: FormatterCommand<'a>,
-    ) -> Option<OutputCommand<impl Iterator<Item = char> + Clone + 'a>> {
-        use GenericFormatterCommand::*;
+    pub fn apply<'s, S: AsRef<str>>(
+        &mut self,
+        command: &'s FormatterCommand<S>,
+    ) -> Option<OutputCommand<impl Iterator<Item = char> + Clone + 's>> {
+        use FormatterCommand::*;
         let mut state = self.state();
 
         let (undo_info, output) = match command {
             Write(input) => {
                 // 1. Mutate string according to current state
-                let output = state.apply(input);
+                let output = state.apply(input.as_ref());
                 let output_len = output.clone().count();
 
                 // 2. Advance state
@@ -92,11 +92,11 @@ impl<const HISTORY_SIZE: usize> Formatter<HISTORY_SIZE> {
                 )
             }
             ChangeCapitalization(capitalization) => {
-                state.capitalization.change_to(capitalization);
+                state.capitalization.change_to(*capitalization);
                 (UndoInfo::EMPTY, None)
             }
             ChangeAttachment(attachment) => {
-                state.attachment.change_to(attachment);
+                state.attachment.change_to(*attachment);
                 (UndoInfo::EMPTY, None)
             }
             ResetFormatting => {
@@ -141,13 +141,13 @@ mod does {
         ];
 
         for command in commands {
-            if let Some(output) = formatter.apply(command) {
+            if let Some(output) = formatter.apply(&command) {
                 aggregator.apply(output);
             }
         }
 
         aggregator.apply(formatter.undo().unwrap());
 
-        assert_eq!(*aggregator, "hello Hello helloWorldJohn");
+        assert_eq!(*aggregator, "Hello Hello helloWorldJohn");
     }
 }
