@@ -1,0 +1,33 @@
+[package]
+name = "shittyfirmware"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+defmt = "0.3"
+defmt-rtt = "0.3"
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+
+embedded-hal = "0.2.6"
+embedded-io = "0.3.0"
+embedded-storage-async = "0.3.0"
+
+usbd-hid = "0.5.2"
+
+embassy = { git = "https://github.com/embassy-rs/embassy", features = ["nightly"] }
+embassy-nrf = { git = "https://github.com/embassy-rs/embassy", features = ["defmt", "nrf52840", "time-driver-rtc1", "gpiote", "unstable-pac", "nightly"] }
+embassy-usb = { git = "https://github.com/embassy-rs/embassy", features = ["defmt"] }
+embassy-usb-hid = { git = "https://github.com/embassy-rs/embassy", features = ["defmt"] }
+
+cortex-m = "0.7.5"
+cortex-m-rt = "0.7.1"
+
+futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
+
+[profile.release]
+debug = 1
+opt-level = "z"
+codegen-units = 1
+lto = "fat"

@@ -6,6 +6,7 @@
         "code/stembed/Cargo.toml",
         "code/stembed-cli/Cargo.toml",
         "code/stembed-nrf/Cargo.toml",
-        "code/fat32/Cargo.toml"
+        "code/fat32/Cargo.toml",
+        "code/shittyengine/Cargo.toml"
     ]
 }
