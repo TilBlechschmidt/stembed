@@ -7,8 +7,6 @@ use embassy_nrf::{
 };
 use embedded_storage_async::nor_flash::AsyncNorFlash;
 
-// TODO We can use the embedded_storage_async::nor_flash traits which are implemented by Qspi :)
-
 const PAGE_SIZE: usize = 4096;
 
 #[derive(defmt::Format)]

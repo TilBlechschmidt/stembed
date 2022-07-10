@@ -26,6 +26,8 @@ cortex-m-rt = "0.7.1"
 
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 
+shittyengine = { path = "../shittyengine", features = ["defmt"] }
+
 [profile.release]
 debug = 1
 opt-level = "z"

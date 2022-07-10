@@ -11,11 +11,38 @@ use panic_probe as _; // global panic handler
 defmt::timestamp!("{=u64}", embassy::time::Instant::now().as_millis());
 
 mod hardware;
+mod logic;
 
 use embassy_nrf::gpio::Pin;
 use hardware::usb;
 
 const FLASH_SIZE: usize = 2usize.pow(16) * 256;
+
+const KEYMAP: &[&[u8]] = &[
+    &[41, 12],         // #
+    &[37, 36],         // S-
+    &[40],             // T-
+    &[39],             // K-
+    &[43],             // P-
+    &[42],             // W-
+    &[46],             // H-
+    &[45],             // R-
+    &[44],             // A
+    &[47],             // O
+    &[49, 48, 17, 16], // *
+    &[15],             // E
+    &[9],              // U
+    &[11],             // -F
+    &[10],             // -R
+    &[14],             // -P
+    &[13],             // -B
+    &[8],              // -L
+    &[7],              // -G
+    &[5],              // -T
+    &[4],              // -S
+    &[2],              // -D
+    &[1],              // -Z
+];
 
 // TODO There is the possiblity to set the keyboard language tag which gives the OS a hint on which keyboard layout to use!
 // TODO Change asserts in hardware modules to returning a result so we can fail gracefully
@@ -31,7 +58,15 @@ async fn main(s: embassy::executor::Spawner, p: embassy_nrf::Peripherals) {
 }
 
 async fn keyboard_shenanigans(_s: embassy::executor::Spawner, p: embassy_nrf::Peripherals) {
-    const ACTIVE_SCAN_PERIOD: embassy::time::Duration = embassy::time::Duration::from_millis(50);
+    use embassy::time::Duration;
+    use futures::{pin_mut, StreamExt};
+    use hardware::keymatrix::*;
+    use logic::*;
+    use shittyengine::Stroke;
+
+    const ACTIVE_SCAN_PERIOD: Duration = Duration::from_millis(15);
+    const REPEAT_INTERVAL: Duration = Duration::from_millis(150);
+    const REPEAT_MAX_TAP_DIST: Duration = Duration::from_millis(500);
 
     let rows_left = [p.P0_24.degrade(), p.P0_22.degrade(), p.P0_05.degrade()];
     let rows_right = [p.P0_28.degrade(), p.P0_03.degrade(), p.P1_11.degrade()];
@@ -53,26 +88,43 @@ async fn keyboard_shenanigans(_s: embassy::executor::Spawner, p: embassy_nrf::Pe
         p.P0_30.degrade(),
     ];
 
-    let matrix_left = hardware::keymatrix::KeyMatrix::new(rows_left, columns_left);
-    let matrix_right = hardware::keymatrix::KeyMatrix::new(rows_right, columns_right);
-    let mut matrix = matrix_left + matrix_right;
+    let matrix_left = KeyMatrix::new(rows_left, columns_left);
+    let matrix_right = KeyMatrix::new(rows_right, columns_right);
+    let mut scanner = MatrixScanner::new(matrix_left + matrix_right, ACTIVE_SCAN_PERIOD);
 
-    // TODO Move most of this into matrix and have it return a stream (or at least a function `next_state` that can be called repeatedly)
-    loop {
-        let immediate = matrix.wait_for_press().await;
-        let state = matrix.scan_once();
+    let mut grouper = KeypressGrouper::new(GroupingMode::FirstUp);
+    let repeater = KeypressRepeater::new(REPEAT_INTERVAL, REPEAT_MAX_TAP_DIST);
 
-        // TODO We never receive the `0` state when releasing the keys
+    let state_stream = scanner
+        .state()
+        .map(|state| map_keys(state, KEYMAP))
+        .map(|keys: u32| {
+            let mut states = [false; 23];
+            for i in 0..23 {
+                states[i] = (keys & (0b1 << i)) > 0;
+            }
+            states
+        });
 
-        defmt::info!(
-            "Matrix state: {=u64:b} {}",
-            state,
-            if immediate { "" } else { "zzZ" }
-        );
+    pin_mut!(state_stream);
 
-        if immediate {
-            embassy::time::Timer::after(ACTIVE_SCAN_PERIOD).await;
-        }
+    let grouped_stream = repeater
+        .apply_grouped_repeat(&mut state_stream, &mut grouper)
+        .map(|keys: [bool; 23]| {
+            let mut state = 0u32;
+            for i in 0..23 {
+                if keys[i] {
+                    state |= 0b1 << i;
+                }
+            }
+            state
+        })
+        .map(Stroke::from_right_aligned);
+
+    pin_mut!(grouped_stream);
+
+    while let Some(stroke) = grouped_stream.next().await {
+        defmt::info!("Stroke: {:?}", stroke);
     }
 }
 
