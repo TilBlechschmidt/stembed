@@ -34,6 +34,10 @@ impl EnglishStroke {
         self.0
     }
 
+    fn contains_vowel(&self) -> bool {
+        (self.0[1] & 0b11111000) > 0
+    }
+
     // Converts from a u32 where the stroke data is right-aligned and covers the last 23 bits
     pub fn from_right_aligned(input: u32) -> Self {
         Self::from(input << 1)
@@ -43,7 +47,7 @@ impl EnglishStroke {
 #[cfg(feature = "defmt")]
 impl defmt::Format for EnglishStroke {
     fn format(&self, f: defmt::Formatter) {
-        let contains_vowel = (self.0[1] & 0b11110000) > 0;
+        let contains_vowel = self.contains_vowel();
 
         for (byte_index, byte) in self.0.iter().enumerate() {
             for bit_index in 0..8 {
@@ -100,7 +104,7 @@ impl AddAssign for EnglishStroke {
 
 impl Display for EnglishStroke {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let contains_vowel = (self.0[1] & 0b11110000) > 0;
+        let contains_vowel = self.contains_vowel();
 
         for (byte_index, byte) in self.0.iter().enumerate() {
             for bit_index in 0..8 {
@@ -146,6 +150,26 @@ mod does {
     fn output_correct_characters() {
         let stroke = EnglishStroke([u8::MAX, u8::MAX, 0b11111110]);
         assert_eq!(stroke.to_string(), "#STKPWHRAO*EUFRPBLGTSDZ");
+    }
+
+    #[test]
+    fn output_vowels_without_dash() {
+        //                   #STKPWHR AO*EU FRPBLGTSDZ
+        let input_a: u32 = 0b00000000_10000_0000000000_0;
+        let input_o: u32 = 0b00000000_01000_0000000000_0;
+        let input_e: u32 = 0b00000000_00010_0000000000_0;
+        let input_u: u32 = 0b00000000_00001_0000000000_0;
+        let data = [
+            (input_a, "A"),
+            (input_o, "O"),
+            (input_e, "E"),
+            (input_u, "U"),
+        ];
+
+        for (input, output) in data {
+            let stroke = EnglishStroke::from(input);
+            assert_eq!(stroke.to_string(), output);
+        }
     }
 
     #[test]

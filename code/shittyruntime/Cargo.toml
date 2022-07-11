@@ -1,0 +1,12 @@
+[package]
+name = "shittyruntime"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+defmt = ["dep:defmt"]
+
+[dependencies]
+futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
+defmt = { version = "0.3", optional = true }

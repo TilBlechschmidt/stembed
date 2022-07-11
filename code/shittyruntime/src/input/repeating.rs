@@ -1,46 +1,56 @@
-use super::KeypressGrouper;
-use embassy::{
-    time::{Duration, Instant, Timer},
-    util::{select, Either},
+use super::{state::InputState, KeypressGrouper};
+use crate::time::*;
+use futures::{
+    future::{select, Either},
+    stream, Stream, StreamExt,
 };
-use futures::{stream, Stream, StreamExt};
 
-pub struct KeypressRepeater {
-    interval: Duration,
-    max_tap_delay: Duration,
+pub struct KeypressRepeater<T: TimeDriver> {
+    interval: T::Duration,
+    max_tap_delay: T::Duration,
+    trigger_delay: T::Duration,
+
+    time_driver: T,
 }
 
-struct RepeatState<'s, const KEY_COUNT: usize, S: Stream<Item = [bool; KEY_COUNT]> + Unpin> {
-    grouper: &'s mut KeypressGrouper<KEY_COUNT>,
-    repeater: &'s KeypressRepeater,
+struct RepeatState<'s, S: Stream<Item = InputState> + Unpin, T: TimeDriver> {
+    grouper: &'s mut KeypressGrouper,
+    repeater: &'s KeypressRepeater<T>,
 
     state_stream: &'s mut S,
 
     /// When the next repeat should occur
-    next_repeat: Option<Instant>,
+    next_repeat: Option<T::Instant>,
     /// Whether something was emitted for the currently active repeat
     repeated_once: bool,
 
-    /// Which stroke was last emitted by the grouper
-    last_emit: Option<(Instant, [bool; KEY_COUNT])>,
-    /// Whether repeat is active and for what stroke
-    repeat: Option<[bool; KEY_COUNT]>,
+    /// Which state was last emitted by the grouper
+    last_emit: Option<(T::Instant, InputState)>,
+    /// Whether repeat is active and for what state
+    repeat: Option<InputState>,
 }
 
-impl KeypressRepeater {
-    pub fn new(interval: Duration, max_tap_delay: Duration) -> Self {
+impl<T: TimeDriver> KeypressRepeater<T> {
+    pub fn new(
+        interval: impl Into<T::Duration>,
+        max_tap_delay: impl Into<T::Duration>,
+        trigger_delay: impl Into<T::Duration>,
+        time_driver: T,
+    ) -> Self {
         Self {
-            interval,
-            max_tap_delay,
+            interval: interval.into(),
+            max_tap_delay: max_tap_delay.into(),
+            trigger_delay: trigger_delay.into(),
+            time_driver,
         }
     }
 
     // Takes an input stream of keyboard states, groups it using the provided grouper, and repeats with the configured interval if a key is tapped and then held.
-    pub fn apply_grouped_repeat<'s, const KEY_COUNT: usize>(
+    pub fn apply_grouped_repeat<'s>(
         &'s self,
-        state_stream: &'s mut (impl Stream<Item = [bool; KEY_COUNT]> + Unpin),
-        grouper: &'s mut KeypressGrouper<KEY_COUNT>,
-    ) -> impl Stream<Item = [bool; KEY_COUNT]> + 's {
+        state_stream: &'s mut (impl Stream<Item = InputState> + Unpin),
+        grouper: &'s mut KeypressGrouper,
+    ) -> impl Stream<Item = InputState> + 's {
         let repeat_state = RepeatState {
             grouper,
             repeater: self,
@@ -60,18 +70,19 @@ impl KeypressRepeater {
 
                 if let Some(repeated_state) = repeat_state.repeat {
                     // Build a future that resolves when the next repeat is due
-                    let repeat_instant = repeat_state
-                        .next_repeat
-                        .unwrap_or_else(|| Instant::now() + repeat_state.repeater.interval);
-                    let repeat_timer = Timer::at(repeat_instant);
+                    let repeat_instant = repeat_state.next_repeat.unwrap_or_else(|| {
+                        repeat_state.repeater.time_driver.now()
+                            + repeat_state.repeater.interval
+                            + repeat_state.repeater.trigger_delay
+                    });
+                    let repeat_timer = repeat_state.repeater.time_driver.wait_until(repeat_instant);
 
                     // Wait for either the next value from the input or the repeat timer
-                    let next_state_future = select(next_input_state, repeat_timer);
-                    match next_state_future.await {
+                    match select(next_input_state, repeat_timer).await {
                         // Input yielded nothing, thus the stream is completed
-                        Either::First(None) => return None,
+                        Either::Left((None, _)) => return None,
                         // Input yielded something new, process and emit it if applicable
-                        Either::First(Some(state)) => {
+                        Either::Left((Some(state), _)) => {
                             if let Some(state) = repeat_state.push(state) {
                                 // If the yielded stroke equals the repeated stroke (and thus ends the repeat)
                                 // then do not emit it. This feels more natural instead of emitting the stroke again.
@@ -85,16 +96,16 @@ impl KeypressRepeater {
                             }
                         }
                         // Repeat timer expired, emit a repeated stroke and reset the timer
-                        Either::Second(_) => {
+                        Either::Right(_) => {
                             repeat_state.repeated_once = true;
-                            repeat_state.next_repeat =
-                                Some(Instant::now() + repeat_state.repeater.interval);
+                            repeat_state.next_repeat = Some(
+                                repeat_state.repeater.time_driver.now()
+                                    + repeat_state.repeater.interval,
+                            );
                             return Some((repeated_state, repeat_state));
                         }
                     }
                 } else if let Some(state) = next_input_state.await {
-                    repeat_state.repeated_once = false;
-
                     // Group the input, emit if applicable or just repeat
                     if let Some(state) = repeat_state.push(state) {
                         return Some((state, repeat_state));
@@ -110,11 +121,11 @@ impl KeypressRepeater {
     }
 }
 
-impl<'s, const KEY_COUNT: usize, S: Stream<Item = [bool; KEY_COUNT]> + Unpin>
-    RepeatState<'s, KEY_COUNT, S>
-{
+impl<'s, S: Stream<Item = InputState> + Unpin, T: TimeDriver> RepeatState<'s, S, T> {
     // Forwards a state to the grouper and updates the repeat state
-    fn push(&mut self, state: [bool; KEY_COUNT]) -> Option<[bool; KEY_COUNT]> {
+    fn push(&mut self, state: InputState) -> Option<InputState> {
+        let mut inhibit_emit = false;
+
         // Update the repeating state
         if let Some((timestamp, last_emit)) = self.last_emit {
             let state_matches = last_emit == state;
@@ -122,14 +133,22 @@ impl<'s, const KEY_COUNT: usize, S: Stream<Item = [bool; KEY_COUNT]> + Unpin>
 
             if state_matches && time_qualifies {
                 self.repeat = Some(state);
-            } else {
+            } else if self.repeat.is_some() {
                 self.repeat = None;
+                self.last_emit = None;
+                self.next_repeat = None;
+                self.repeated_once = false;
+
+                // Make sure that `last_emit` stays empty so a full tap-tap-hold is required to trigger it again instead of just a tap-hold
+                inhibit_emit = true;
             }
         }
 
         // Push the state into the grouper and handle any emitted strokes
         if let Some(emit) = self.grouper.push(state) {
-            self.last_emit = Some((Instant::now(), emit));
+            if !inhibit_emit {
+                self.last_emit = Some((self.repeater.time_driver.now(), emit));
+            }
             Some(emit)
         } else {
             None

@@ -5,16 +5,14 @@ use embassy::util::Either::*;
 use embassy::util::{select, select_all};
 use embassy_nrf::gpio::{AnyPin, Input, Level, Output, OutputDrive, Pull};
 use futures::{stream, Stream, StreamExt};
+use shittyruntime::input::{InputState, KeyPosition};
 
 pub trait ScannableMatrix {
-    type Output: Eq;
     type WaitFuture<'a>: Future<Output = ()> + 'a
     where
         Self: 'a;
 
-    const NO_KEYPRESS_VALUE: Self::Output;
-
-    fn scan_once(&mut self) -> Self::Output;
+    fn scan_once(&mut self) -> InputState;
     fn wait_for_press<'a>(&'a mut self) -> Self::WaitFuture<'a>;
 }
 
@@ -22,13 +20,10 @@ pub struct MatrixScanner<M: ScannableMatrix + Unpin> {
     matrix: M,
     active_scan_interval: Duration,
 
-    previous_data: Option<M::Output>,
+    previous_data: Option<InputState>,
 }
 
-impl<M: ScannableMatrix + Unpin> MatrixScanner<M>
-where
-    M::Output: Copy,
-{
+impl<M: ScannableMatrix + Unpin> MatrixScanner<M> {
     pub fn new(matrix: M, active_scan_interval: Duration) -> Self {
         Self {
             matrix,
@@ -37,7 +32,7 @@ where
         }
     }
 
-    pub fn state<'m>(&'m mut self) -> impl Stream<Item = M::Output> + 'm {
+    pub fn state<'m>(&'m mut self) -> impl Stream<Item = InputState> + 'm {
         self.previous_data = None;
 
         struct ScanState<'m, M> {
@@ -61,10 +56,7 @@ where
             }
 
             let data = state.matrix.scan_once();
-
-            if data == M::NO_KEYPRESS_VALUE {
-                state.sleeping = true;
-            }
+            state.sleeping = data.is_empty();
 
             Some((data, state))
         })
@@ -79,40 +71,51 @@ where
 pub struct KeyMatrix<'p, const ROWS: usize, const COLUMNS: usize> {
     rows: [Input<'p, AnyPin>; ROWS],
     columns: [Output<'p, AnyPin>; COLUMNS],
+    keymap: &'p [Option<KeyPosition>],
 }
 
 impl<'p, const ROWS: usize, const COLUMNS: usize> KeyMatrix<'p, ROWS, COLUMNS> {
-    pub fn new(rows: [AnyPin; ROWS], columns: [AnyPin; COLUMNS]) -> Self {
-        assert!(
-            rows.len() * columns.len() <= u32::BITS as usize,
-            "there may not be more than 32 keys"
+    pub fn new(
+        rows: [AnyPin; ROWS],
+        columns: [AnyPin; COLUMNS],
+        keymap: &'p [Option<KeyPosition>],
+    ) -> Self {
+        assert_eq!(
+            ROWS * COLUMNS,
+            keymap.len(),
+            "keymap does not contain a mapping for each key"
         );
 
         let rows = rows.map(|pin| Input::new(pin, Pull::Down));
         let columns = columns.map(|pin| Output::new(pin, Level::Low, OutputDrive::HighDrive));
 
-        Self { rows, columns }
+        Self {
+            rows,
+            columns,
+            keymap,
+        }
     }
 }
 
 impl<'p, const ROWS: usize, const COLUMNS: usize> ScannableMatrix for KeyMatrix<'p, ROWS, COLUMNS> {
-    type Output = u32;
     type WaitFuture<'a> = impl Future<Output = ()> + 'a
     where
         Self: 'a;
 
-    const NO_KEYPRESS_VALUE: Self::Output = 0;
+    fn scan_once(&mut self) -> InputState {
+        let mut state = InputState::EMPTY;
 
-    fn scan_once(&mut self) -> u32 {
-        let mut state = 0u32;
-
-        for column in self.columns.iter_mut() {
+        for (ci, column) in self.columns.iter_mut().enumerate() {
             column.set_high();
 
-            for row in self.rows.iter_mut() {
-                let key_state = if row.is_low() { 0 } else { 1 };
-                state = state << 1;
-                state = state | key_state;
+            for (ri, row) in self.rows.iter_mut().enumerate() {
+                let i = ri * COLUMNS + ci;
+
+                if let Some(position) = self.keymap[i] {
+                    if row.is_high() {
+                        state.set(position);
+                    }
+                }
             }
 
             column.set_low();
@@ -159,15 +162,12 @@ impl<
         const COLUMNS_RIGHT: usize,
     > ScannableMatrix for JoinedKeyMatrix<'p, ROWS_LEFT, ROWS_RIGHT, COLUMNS_LEFT, COLUMNS_RIGHT>
 {
-    type Output = u64;
     type WaitFuture<'a> = impl Future<Output = ()> + 'a
     where
         Self: 'a;
 
-    const NO_KEYPRESS_VALUE: Self::Output = 0;
-
-    fn scan_once(&mut self) -> u64 {
-        ((self.left.scan_once() as u64) << 32) + self.right.scan_once() as u64
+    fn scan_once(&mut self) -> InputState {
+        self.left.scan_once() + self.right.scan_once()
     }
 
     fn wait_for_press<'a>(&'a mut self) -> Self::WaitFuture<'a> {
@@ -196,19 +196,6 @@ impl<
             right: rhs,
         }
     }
-}
-
-pub fn map_keys(input: u64, keymap: &[&[u8]]) -> u32 {
-    let mut output = 0u32;
-
-    for (target_index, input_indices) in keymap.iter().rev().enumerate() {
-        for input_index in input_indices.iter() {
-            let value = (input >> input_index) & 1;
-            output |= (value as u32) << target_index;
-        }
-    }
-
-    output
 }
 
 fn array_from_iter<I: IntoIterator, const N: usize>(iter: I) -> Option<[I::Item; N]> {
