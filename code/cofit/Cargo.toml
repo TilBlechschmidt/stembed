@@ -1,0 +1,12 @@
+[package]
+name = "cofit"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+host = []
+peripheral = []
+
+[dependencies]
+futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
