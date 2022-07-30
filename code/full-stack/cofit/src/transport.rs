@@ -1,3 +1,5 @@
+#![allow(clippy::needless_lifetimes)]
+
 use super::MessageID;
 use core::future::Future;
 

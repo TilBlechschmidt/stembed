@@ -17,6 +17,7 @@ pub trait Message<const MTU: usize>: Sized {
     fn to_packet(self) -> [u8; MTU];
 
     /// Deserializes the packet of bytes back into a typed message instance
+    #[allow(clippy::result_unit_err)]
     fn from_packet(packet: [u8; MTU]) -> Result<Self, ()>;
 }
 
@@ -52,8 +53,7 @@ impl<const MTU: usize> Message<MTU> for Assign<MTU> {
 }
 
 impl<const MTU: usize> Assign<MTU> {
-    #[cfg(feature = "host")]
-    pub fn new(id: MessageID, identifier: MessageIdentifier) -> Self {
+    pub(crate) fn new(id: MessageID, identifier: MessageIdentifier) -> Self {
         let mut buf = [0; MTU];
         buf[0] = id;
 
@@ -64,15 +64,13 @@ impl<const MTU: usize> Assign<MTU> {
         Self(buf)
     }
 
-    #[cfg(feature = "peripheral")]
-    pub fn id(&self) -> MessageID {
+    pub(crate) fn id(&self) -> MessageID {
         self.0[0]
     }
 
-    #[cfg(feature = "peripheral")]
-    pub fn identifier(&self) -> MessageIdentifier {
+    pub(crate) fn identifier(&self) -> MessageIdentifier {
         let length = self.0[1] as usize;
         let bytes = &self.0[2..2 + length];
-        core::str::from_utf8(&bytes).unwrap()
+        core::str::from_utf8(bytes).unwrap()
     }
 }

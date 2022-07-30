@@ -1,8 +1,13 @@
+use crate::{Host, Peripheral};
+
 use super::{
     message::{ASSIGN_ID, ASSIGN_IDENTIFIER, RESET_ID, RESET_IDENTIFIER},
-    MessageID, MessageIdentifier,
+    MessageID, MessageIdentifier, Role,
 };
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::{
+    marker::PhantomData,
+    sync::atomic::{AtomicU8, Ordering},
+};
 
 pub(crate) enum RegistryLookupResult {
     ID(MessageID),
@@ -12,11 +17,12 @@ pub(crate) enum RegistryLookupResult {
 
 /// Internal data structure for managing dynamic assignments of MessageIDs. Only intended for use from within the `make_network!` macro.
 #[doc(hidden)]
-pub struct IdentifierRegistry<'a> {
+pub struct IdentifierRegistry<'a, R: Role> {
     assignments: &'a [(AtomicU8, MessageIdentifier<'static>)],
+    role: PhantomData<R>,
 }
 
-impl<'a> IdentifierRegistry<'a> {
+impl<'a, R: Role> IdentifierRegistry<'a, R> {
     /// Internally used ID for representing unassigned IDs (so that AtomicU8 can be used as opposed to a Option<MessageID>)
     #[doc(hidden)]
     pub const UNASSIGNED: MessageID = MessageID::MAX;
@@ -26,7 +32,10 @@ impl<'a> IdentifierRegistry<'a> {
 
     #[doc(hidden)]
     pub const fn new(assignments: &'a [(AtomicU8, MessageIdentifier<'static>)]) -> Self {
-        Self { assignments }
+        Self {
+            role: PhantomData,
+            assignments,
+        }
     }
 
     #[doc(hidden)]
@@ -49,7 +58,7 @@ impl<'a> IdentifierRegistry<'a> {
             }
         }
 
-        return false;
+        false
     }
 
     /// Looks up a message ID from a message identifier
@@ -90,17 +99,19 @@ impl<'a> IdentifierRegistry<'a> {
             None
         }
     }
+}
 
+impl<'a> IdentifierRegistry<'a, Peripheral> {
     /// Removes all previous assignments
-    #[cfg(feature = "peripheral")]
     pub(crate) fn clear(&self) {
         for (id, _) in self.assignments.iter() {
             id.store(0, Ordering::Relaxed);
         }
     }
+}
 
+impl<'a> IdentifierRegistry<'a, Host> {
     /// Statically and locally assigns IDs to each message type.
-    #[cfg(feature = "host")]
     pub(crate) fn assign_all(
         &self,
     ) -> impl Iterator<Item = (MessageIdentifier<'static>, MessageID)> + '_ {

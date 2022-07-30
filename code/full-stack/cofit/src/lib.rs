@@ -26,13 +26,6 @@
 //! The peripheral will never send messages which are not supported by the host and will ignore any messages sent by the host
 //! that it can not handle (in the future the host may be notified of the peripherals capabilities so those messages wont even be sent).
 //!
-//! ## Feature flags
-//!
-//! | Flag | Features |
-//! |--------|----------|
-//! | `host` | Asserts message identifier assignment authority |
-//! | `peripheral` | Slave mode for message identifier assignments |
-//!
 //! ## Usage workflow
 //!
 //! 1. Create a [`Transport`](self::Transport) implementation
@@ -44,11 +37,11 @@
 //! 6. If you are the host, call [`reset_peripheral`](self::Transmitter::reset_peripheral) once connected
 //! 7. Send some messages!
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(feature = "usb", feature(type_alias_impl_trait))]
+#![feature(doc_auto_cfg)]
+#![feature(doc_cfg)]
 #![feature(generic_associated_types)]
-
-#[cfg(all(feature = "host", feature = "peripheral"))]
-compile_error!("features `cofit/host` and `cofit/peripheral` are mutually exclusive");
 
 type MessageID = u8;
 
@@ -64,6 +57,8 @@ mod registry;
 mod task;
 mod transmitter;
 mod transport;
+#[cfg(feature = "usb")]
+mod usb_hid;
 
 pub use message::Message;
 pub use receiver::*;
@@ -71,6 +66,8 @@ pub use registry::*;
 pub use task::*;
 pub use transmitter::*;
 pub use transport::*;
+#[cfg(feature = "usb")]
+pub use usb_hid::UsbHidTransport;
 
 /// Creates a new [`Receiver`](self::Receiver) + [`Transmitter`](self::Transmitter) pair from a given transport
 ///
@@ -84,7 +81,7 @@ pub use transport::*;
 /// ```
 /// # #![feature(generic_associated_types)]
 /// # #![feature(type_alias_impl_trait)]
-/// # use cofit::{Message, MessageIdentifier, make_network, Transport};
+/// # use cofit::{Message, Host, MessageIdentifier, make_network, Transport};
 /// # use core::future::Future;
 /// # const MTU: usize = 42;
 /// #
@@ -142,25 +139,29 @@ pub use transport::*;
 /// # }
 ///
 /// let transport = UsbHidTransport::new();
-/// let (tx, rx) = make_network!(&transport, [WriteFlashMessage, ReadFlashMessage]);
+/// let (tx, rx) = make_network! {
+///     role: Host,
+///     transport: &transport,
+///     messages: [WriteFlashMessage, ReadFlashMessage]
+/// };
 ///
 /// // Make sure to constantly call `rx.recv()` so that `tx.send(_)` operates correctly.
 /// // You may use `make_receiver_task` to create an async task that does this for you!
 /// ```
 #[macro_export]
 macro_rules! make_network {
-    ($transport:expr, [$($message:ty),+ $(,)?]) => {
+    (role: $role:ident, transport: $transport:expr, messages: [$($message:ty),+ $(,)?]) => {
         {
-            use $crate::{make_network, IdentifierRegistry, Transmitter, Receiver};
+            use $crate::{make_network, IdentifierRegistry, Transmitter, Receiver, Message};
 
-            const _: () = IdentifierRegistry::verify_message_count(make_network!(@count $({$message})*));
+            const _: () = IdentifierRegistry::<$role>::verify_message_count(make_network!(@count $({$message})*));
             // TODO Verify that there are no duplicate messages at compile time (requires sub-macros that emit a compile_error! as recursion/loops are not possible in const code)
 
-            static ASSIGNMENTS: [(core::sync::atomic::AtomicU8, $crate::MessageIdentifier<'static>); make_network!(@count $({$message})*)] = [$((core::sync::atomic::AtomicU8::new(IdentifierRegistry::UNASSIGNED), <$message>::IDENTIFIER),)+];
-            static REGISTRY: IdentifierRegistry = IdentifierRegistry::new(&ASSIGNMENTS);
+            static ASSIGNMENTS: [(core::sync::atomic::AtomicU8, $crate::MessageIdentifier<'static>); make_network!(@count $({$message})*)] = [$((core::sync::atomic::AtomicU8::new(IdentifierRegistry::<$role>::UNASSIGNED), <$message>::IDENTIFIER),)+];
+            static REGISTRY: IdentifierRegistry<$role> = IdentifierRegistry::new(&ASSIGNMENTS);
 
-            let transmitter = Transmitter::new(&REGISTRY, $transport);
-            let receiver = Receiver::new(&REGISTRY, $transport);
+            let transmitter = Transmitter::new($role, &REGISTRY, $transport);
+            let receiver = Receiver::new($role, &REGISTRY, $transport);
 
             (transmitter, receiver)
         }
@@ -168,4 +169,45 @@ macro_rules! make_network {
 
     (@count) => { 0 };
     (@count $t:tt $($rest:tt)*) => { 1 + make_network!(@count $($rest)*) }
+}
+
+macro_rules! type_enum {
+    {$(#[doc = $doc:expr])* $vis:vis enum $name:ident: $sealed:ident { $($(#[doc = $vardoc:expr])* $variant:ident),* $(,)? }} => {
+        $(
+            #[derive(Default)]
+            $(
+                #[doc = $vardoc]
+            )*
+            $vis struct $variant;
+        )*
+
+        mod $sealed {
+            pub trait Sealed { }
+
+            $(
+                impl Sealed for super::$variant { }
+            )*
+        }
+
+        $(
+            #[doc = $doc]
+        )*
+        $vis trait $name: $sealed::Sealed { }
+
+        $(
+            impl $name for $variant { }
+        )*
+    };
+}
+
+type_enum! {
+    /// Marker type for the side on which the network stack operates
+    pub enum Role: sealed_role {
+        /// Role for the host
+        // TODO Add some additional documentation on what makes the host special
+        Host,
+        /// Role for the peripheral
+        // TODO Add some additional documentation on what makes the peripheral special
+        Peripheral,
+    }
 }

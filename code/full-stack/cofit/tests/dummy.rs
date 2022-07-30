@@ -1,7 +1,9 @@
 #![feature(generic_associated_types)]
 #![feature(type_alias_impl_trait)]
 
-use cofit::{make_network, make_receiver_task, Handler, Message, MessageIdentifier, Transport};
+use cofit::{
+    make_network, make_receiver_task, Handler, Host, Message, MessageIdentifier, Transport,
+};
 use core::future::Future;
 
 const MTU: usize = 42;
@@ -88,6 +90,10 @@ fn it_does_stuff() {
     let handler_a = MessageAHandler;
     let handler_b = MessageBHandler;
 
-    let (tx, rx) = make_network!(&transport, [MessageA, MessageB]);
+    let (tx, rx) = make_network! {
+        role: Host,
+        transport: &transport,
+        messages: [MessageA, MessageB]
+    };
     let rx_task = make_receiver_task!(rx, [handler_a, handler_b]);
 }

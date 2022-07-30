@@ -1,3 +1,5 @@
+#![allow(clippy::needless_lifetimes)]
+
 use super::{Message, MessageIdentifier};
 use core::future::Future;
 
@@ -17,6 +19,7 @@ pub trait Handler<const MTU: usize> {
     fn handle<'s>(&'s self, message: Self::Message) -> Self::RecvFut<'s>;
 
     #[doc(hidden)]
+    #[allow(clippy::result_unit_err)]
     fn handle_raw<'s>(
         &'s self,
         identifier: MessageIdentifier<'_>,
@@ -60,7 +63,7 @@ macro_rules! make_receiver_task {
 
             // TODO Verify that all handler message types are registered in the $receiver.registry
 
-            async move {
+            async {
                 loop {
                     let (identifier, packet) = $receiver.recv().await;
 

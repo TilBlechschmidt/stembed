@@ -1,19 +1,22 @@
-#[cfg(feature = "host")]
-use super::{message, MessageID, MessageIdentifier};
-use super::{IdentifierRegistry, Message, RegistryLookupResult, Transport};
+use super::{
+    message, Host, IdentifierRegistry, Message, MessageID, MessageIdentifier, RegistryLookupResult,
+    Role, Transport,
+};
 
 /// Transmitting half of the network stack
-pub struct Transmitter<'r, 't, const MTU: usize, T: Transport<MTU>> {
-    registry: &'r IdentifierRegistry<'r>,
+pub struct Transmitter<'r, 't, const MTU: usize, T: Transport<MTU>, R: Role> {
+    registry: &'r IdentifierRegistry<'r, R>,
     transport: &'t T,
+    _role: R,
 }
 
-impl<'r, 't, const MTU: usize, T: Transport<MTU>> Transmitter<'r, 't, MTU, T> {
+impl<'r, 't, const MTU: usize, T: Transport<MTU>, R: Role> Transmitter<'r, 't, MTU, T, R> {
     #[doc(hidden)]
-    pub fn new(registry: &'r IdentifierRegistry<'r>, transport: &'t T) -> Self {
+    pub fn new(role: R, registry: &'r IdentifierRegistry<'r, R>, transport: &'t T) -> Self {
         Self {
             registry,
             transport,
+            _role: role,
         }
     }
 
@@ -30,10 +33,11 @@ impl<'r, 't, const MTU: usize, T: Transport<MTU>> Transmitter<'r, 't, MTU, T> {
             }
         }
     }
+}
 
+impl<'r, 't, const MTU: usize, T: Transport<MTU>> Transmitter<'r, 't, MTU, T, Host> {
     /// Performs a reset of the remote devices' network stack to establish communication. This should be called whenever you connect or reconnect to a peripheral!
     // TODO Potentially make this a 2-way handshake so we can be sure that the other side received it and is answering as expected
-    #[cfg(feature = "host")]
     pub async fn reset_peripheral(&self) {
         self.send(message::Reset).await;
 
@@ -41,7 +45,6 @@ impl<'r, 't, const MTU: usize, T: Transport<MTU>> Transmitter<'r, 't, MTU, T> {
         self.transmit_assignments(assignments).await;
     }
 
-    #[cfg(feature = "host")]
     async fn transmit_assignments(
         &self,
         assignments: impl Iterator<Item = (MessageIdentifier<'static>, MessageID)>,
