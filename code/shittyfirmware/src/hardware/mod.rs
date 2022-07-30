@@ -1,6 +1,5 @@
 pub mod flash;
 pub mod keymatrix;
-pub mod timer;
 pub mod usb;
 
 pub mod clock {

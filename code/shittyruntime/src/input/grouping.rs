@@ -20,7 +20,7 @@ impl KeypressGrouper {
         }
     }
 
-    // Adds a keyboard state to the grouper and optionally emits a state if the grouping criterum is fulfilled
+    /// Adds a keyboard state to the grouper and optionally emits a state if the grouping criterum is fulfilled
     pub fn push(&mut self, state: InputState) -> Option<InputState> {
         match self.mode {
             GroupingMode::FirstUp => self.push_first_up(state),

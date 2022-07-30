@@ -1,5 +1,5 @@
 #[cfg(feature = "host")]
-use super::message;
+use super::{message, MessageID, MessageIdentifier};
 use super::{IdentifierRegistry, Message, RegistryLookupResult, Transport};
 
 /// Transmitting half of the network stack
@@ -36,13 +36,17 @@ impl<'r, 't, const MTU: usize, T: Transport<MTU>> Transmitter<'r, 't, MTU, T> {
     #[cfg(feature = "host")]
     pub async fn reset_peripheral(&self) {
         self.send(message::Reset).await;
-        self.registry.assign_all();
-        self.transmit_assignments().await;
+
+        let assignments = self.registry.assign_all();
+        self.transmit_assignments(assignments).await;
     }
 
     #[cfg(feature = "host")]
-    async fn transmit_assignments(&self) {
-        for (identifier, id) in self.registry.assign_all() {
+    async fn transmit_assignments(
+        &self,
+        assignments: impl Iterator<Item = (MessageIdentifier<'static>, MessageID)>,
+    ) {
+        for (identifier, id) in assignments {
             self.send(message::Assign::new(id, identifier)).await;
         }
     }

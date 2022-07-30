@@ -8,7 +8,8 @@ use embassy::{
 };
 use embassy_usb::{control::OutResponse, driver::Driver, Builder};
 use embassy_usb_hid::{HidReaderWriter, ReportId, RequestHandler, State};
-use futures::future::join;
+use futures::{future::join, sink, Sink};
+use shittyruntime::firmware::AsyncOutputCommand;
 use usbd_hid::descriptor::{KeyboardReport, SerializedDescriptor};
 
 const POLL_INTERVAL_MS: u8 = 1;
@@ -161,6 +162,23 @@ impl<'c> Keyboard<'c> {
         for c in string.as_ref().chars() {
             self.send(Key::Character(c)).await;
         }
+    }
+
+    pub fn into_sink(self) -> impl Sink<AsyncOutputCommand> + 'c {
+        sink::unfold(self.0, |channel, command| async move {
+            match command {
+                AsyncOutputCommand::Write(character) => {
+                    channel.send(Key::Character(character)).await;
+                }
+                AsyncOutputCommand::Backspace(count) => {
+                    for _ in 0..count {
+                        channel.send(Key::Backspace).await;
+                    }
+                }
+            }
+
+            Ok::<_, ()>(channel)
+        })
     }
 }
 

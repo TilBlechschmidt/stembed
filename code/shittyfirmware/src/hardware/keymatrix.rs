@@ -19,8 +19,6 @@ pub trait ScannableMatrix {
 pub struct MatrixScanner<M: ScannableMatrix + Unpin> {
     matrix: M,
     active_scan_interval: Duration,
-
-    previous_data: Option<InputState>,
 }
 
 impl<M: ScannableMatrix + Unpin> MatrixScanner<M> {
@@ -28,23 +26,22 @@ impl<M: ScannableMatrix + Unpin> MatrixScanner<M> {
         Self {
             matrix,
             active_scan_interval,
-            previous_data: None,
         }
     }
 
-    pub fn state<'m>(&'m mut self) -> impl Stream<Item = InputState> + 'm {
-        self.previous_data = None;
+    pub fn into_state_stream(self) -> impl Stream<Item = InputState> {
+        let mut previous_data: Option<InputState> = None;
 
-        struct ScanState<'m, M> {
+        struct ScanState<M> {
             sleeping: bool,
             scan_interval: Duration,
-            matrix: &'m mut M,
+            matrix: M,
         }
 
         let initial_state = ScanState {
             sleeping: false,
             scan_interval: self.active_scan_interval,
-            matrix: &mut self.matrix,
+            matrix: self.matrix,
         };
 
         stream::unfold(initial_state, |mut state| async move {
@@ -60,9 +57,9 @@ impl<M: ScannableMatrix + Unpin> MatrixScanner<M> {
 
             Some((data, state))
         })
-        .filter(|data| {
-            let is_included = Some(*data) != self.previous_data;
-            self.previous_data = Some(*data);
+        .filter(move |data| {
+            let is_included = Some(*data) != previous_data;
+            previous_data = Some(*data);
             ready(is_included)
         })
     }

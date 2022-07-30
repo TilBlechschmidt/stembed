@@ -1,13 +1,18 @@
+use core::future::Future;
 use defmt::{debug, warn, Format};
 use embassy::{
     blocking_mutex::raw::NoopRawMutex,
-    channel::mpmc::{Channel, Receiver, Sender},
+    channel::{
+        self,
+        mpmc::{Channel as EmbassyChannel, Receiver, Sender},
+    },
     time::Duration,
     util::Forever,
 };
 use embassy_usb::{control::OutResponse, driver::Driver, Builder};
 use embassy_usb_hid::{HidReaderWriter, ReportId, RequestHandler, State};
 use futures::future::join;
+use shittyruntime::cofit::Transport;
 use usbd_hid::descriptor::{gen_hid_descriptor, SerializedDescriptor};
 
 const POLL_INTERVAL_MS: u8 = 1;
@@ -19,52 +24,43 @@ const INCOMING_USB_BUFFER_LEN: usize = 64;
 const OUTGOING_USB_BUFFER_LEN: usize = 64;
 
 static STATE: Forever<State> = Forever::new();
-static HOST_DEVICE_CHANNEL: Forever<Channel<NoopRawMutex, EncodedCommand, INCOMING_BUFFER_LEN>> =
+static HOST_DEVICE_CHANNEL: Forever<EmbassyChannel<NoopRawMutex, Packet, INCOMING_BUFFER_LEN>> =
     Forever::new();
-static DEVICE_HOST_CHANNEL: Forever<Channel<NoopRawMutex, EncodedCommand, OUTGOING_BUFFER_LEN>> =
+static DEVICE_HOST_CHANNEL: Forever<EmbassyChannel<NoopRawMutex, Packet, OUTGOING_BUFFER_LEN>> =
     Forever::new();
 static REQUEST_HANDLER: Forever<CommandChannelRequestHandler> = Forever::new();
 
-#[derive(Format)]
-pub struct EncodedCommand {
-    pub identifier: u8,
-    pub payload: [u8; 63],
+pub struct Packet([u8; 64]);
+
+pub struct Channel<'c> {
+    tx: &'c EmbassyChannel<NoopRawMutex, Packet, OUTGOING_BUFFER_LEN>,
+    rx: Receiver<'c, NoopRawMutex, Packet, INCOMING_BUFFER_LEN>,
 }
 
-/// Sends commands to the USB task which forwards them to the host
-#[derive(Clone, Copy)]
-pub struct CommandSender<'c>(&'c Channel<NoopRawMutex, EncodedCommand, OUTGOING_BUFFER_LEN>);
-
-impl<'c> CommandSender<'c> {
-    pub async fn send(&self, command: EncodedCommand) {
-        self.0.send(command).await;
-    }
-}
-
-/// Receives commands from the host which have been forwarded by the USB task
-pub struct CommandReceiver<'c>(Receiver<'c, NoopRawMutex, EncodedCommand, INCOMING_BUFFER_LEN>);
-
-impl<'c> CommandReceiver<'c> {
-    pub async fn recv(&self) -> EncodedCommand {
-        self.0.recv().await
-    }
-}
-
-pub struct CommandRuntime<'r, D: Driver<'static>> {
+pub struct ChannelRuntime<'r, D: Driver<'static>> {
     request_handler: &'r CommandChannelRequestHandler,
     reader_writer: HidReaderWriter<'static, D, OUTGOING_USB_BUFFER_LEN, INCOMING_USB_BUFFER_LEN>,
-    device_host_receiver: Receiver<'static, NoopRawMutex, EncodedCommand, OUTGOING_BUFFER_LEN>,
+    device_host_receiver: Receiver<'static, NoopRawMutex, Packet, OUTGOING_BUFFER_LEN>,
+}
+
+impl<'c> Transport<64> for Channel<'c> {
+    type TxFut<'t> = impl Future<Output = ()> + 't where Self: 't;
+    type RxFut<'t> = impl Future<Output = [u8; 64]> + 't where Self: 't;
+
+    fn send<'t>(&'t self, data: [u8; 64]) -> Self::TxFut<'t> {
+        self.tx.send(Packet(data))
+    }
+
+    fn recv<'t>(&'t self) -> Self::RxFut<'t> {
+        async move { self.rx.recv().await.0 }
+    }
 }
 
 pub fn configure<D: Driver<'static>>(
     builder: &mut Builder<'static, D>,
-) -> (
-    CommandSender<'static>,
-    CommandReceiver<'static>,
-    CommandRuntime<'static, D>,
-) {
-    let host_device_channel = HOST_DEVICE_CHANNEL.put(Channel::new());
-    let device_host_channel = DEVICE_HOST_CHANNEL.put(Channel::new());
+) -> (Channel<'static>, ChannelRuntime<'static, D>) {
+    let host_device_channel = HOST_DEVICE_CHANNEL.put(EmbassyChannel::new());
+    let device_host_channel = DEVICE_HOST_CHANNEL.put(EmbassyChannel::new());
     let state = STATE.put(State::new());
     let request_handler = REQUEST_HANDLER.put(CommandChannelRequestHandler {
         host_device_sender: host_device_channel.sender(),
@@ -81,21 +77,23 @@ pub fn configure<D: Driver<'static>>(
         builder, state, config,
     );
 
-    let runtime = CommandRuntime {
+    let runtime = ChannelRuntime {
         request_handler,
         reader_writer,
         device_host_receiver: device_host_channel.receiver(),
     };
 
-    let command_sender = CommandSender(device_host_channel);
-    let command_receiver = CommandReceiver(host_device_channel.receiver());
+    let command_channel = Channel {
+        tx: device_host_channel,
+        rx: host_device_channel.receiver(),
+    };
 
-    (command_sender, command_receiver, runtime)
+    (command_channel, runtime)
 }
 
 #[embassy::task]
 pub async fn run(
-    runtime: CommandRuntime<
+    runtime: ChannelRuntime<
         'static,
         embassy_nrf::usb::Driver<'static, embassy_nrf::peripherals::USBD>,
     >,
@@ -105,13 +103,9 @@ pub async fn run(
     let reader_fut = reader.run(false, runtime.request_handler);
     let writer_fut = async move {
         loop {
-            let command = runtime.device_host_receiver.recv().await;
+            let packet = runtime.device_host_receiver.recv().await;
 
-            let mut data = [0; 64];
-            data[0] = command.identifier;
-            data[1..].copy_from_slice(&command.payload);
-
-            if let Err(e) = writer.write(&data).await {
+            if let Err(e) = writer.write(&packet.0).await {
                 warn!("failed to send command: {:?}", e);
             }
         }
@@ -132,7 +126,7 @@ struct BidirectionalReport {
 }
 
 struct CommandChannelRequestHandler {
-    host_device_sender: Sender<'static, NoopRawMutex, EncodedCommand, INCOMING_BUFFER_LEN>,
+    host_device_sender: Sender<'static, NoopRawMutex, Packet, INCOMING_BUFFER_LEN>,
 }
 
 impl RequestHandler for CommandChannelRequestHandler {
@@ -145,16 +139,13 @@ impl RequestHandler for CommandChannelRequestHandler {
             return OutResponse::Rejected;
         }
 
-        let mut payload = [0; 63];
-        payload.copy_from_slice(&data[1..]);
+        let mut payload = [0; 64];
+        payload.copy_from_slice(&data);
 
-        let command = EncodedCommand {
-            identifier: data[0],
-            payload,
-        };
+        let command = Packet(payload);
 
         if let Err(e) = self.host_device_sender.try_send(command) {
-            warn!("failed to forward host->device command: {:?}", e);
+            warn!("failed to forward host -> device command, lagging behind");
             OutResponse::Rejected
         } else {
             OutResponse::Accepted

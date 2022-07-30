@@ -4,9 +4,23 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = []
+default = ["tokio"]
+std = []
 defmt = ["dep:defmt"]
+
+# Executor support features
+tokio = ["std", "dep:tokio"]
+embassy = ["dep:embassy"]
 
 [dependencies]
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 defmt = { version = "0.3", optional = true }
+embedded-storage-async = "0.3.0"
+
+# Serde experiments
+serde = { version = "1.0", default-features = false }
+postcard = "1.0.0"
+
+# Executor support
+tokio = { version = "1.20", default-features = false, features = ["time", "sync"], optional = true }
+embassy = { git = "https://github.com/embassy-rs/embassy", features = ["time"], optional = true }

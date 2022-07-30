@@ -1,5 +1,5 @@
 use super::{state::InputState, KeypressGrouper};
-use crate::time::*;
+use crate::firmware::*;
 use futures::{
     future::{select, Either},
     stream, Stream, StreamExt,

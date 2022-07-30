@@ -9,10 +9,6 @@ use embedded_storage_async::nor_flash::AsyncNorFlash;
 
 const PAGE_SIZE: usize = 4096;
 
-#[derive(defmt::Format)]
-#[repr(C, align(4))]
-struct AlignedBuf([u8; PAGE_SIZE]);
-
 /// Configures a W25Q128FV flash chip connected to the given pins for operation
 pub async fn configure<const FLASH_SIZE: usize>(
     peripheral: QSPI,
@@ -69,50 +65,54 @@ pub async fn configure<const FLASH_SIZE: usize>(
     qspi
 }
 
-/// Confirms that the flash chip operates correctly by writing eight pages of data and reading them back
-async fn verify_flash_operation<const FLASH_SIZE: usize>(qspi: &mut Qspi<'_, QSPI, FLASH_SIZE>) {
-    let mut buf = AlignedBuf([1u8; PAGE_SIZE]);
+// #[derive(defmt::Format)]
+// #[repr(C, align(4))]
+// struct AlignedBuf([u8; PAGE_SIZE]);
 
-    let pattern = |a: u32| (a ^ (a >> 8) ^ (a >> 16) ^ (a >> 24)) as u8;
+// /// Confirms that the flash chip operates correctly by writing eight pages of data and reading them back
+// async fn verify_flash_operation<const FLASH_SIZE: usize>(qspi: &mut Qspi<'_, QSPI, FLASH_SIZE>) {
+//     let mut buf = AlignedBuf([1u8; PAGE_SIZE]);
 
-    for i in 0..8 {
-        info!("page {:?}: erasing... ", i);
-        unwrap!(qspi.erase(i * PAGE_SIZE).await);
+//     let pattern = |a: u32| (a ^ (a >> 8) ^ (a >> 16) ^ (a >> 24)) as u8;
 
-        for j in 0..PAGE_SIZE {
-            buf.0[j] = pattern((j + i * PAGE_SIZE) as u32);
-        }
+//     for i in 0..8 {
+//         info!("page {:?}: erasing... ", i);
+//         unwrap!(qspi.erase(i * PAGE_SIZE).await);
 
-        info!("programming...");
-        unwrap!(qspi.write(i * PAGE_SIZE, &buf.0).await);
-    }
+//         for j in 0..PAGE_SIZE {
+//             buf.0[j] = pattern((j + i * PAGE_SIZE) as u32);
+//         }
 
-    let mut different_bytes = 0;
-    let mut success = true;
-    for i in 0..8 {
-        info!("page {:?}: reading... ", i);
-        unwrap!(qspi.read(i * PAGE_SIZE, &mut buf.0).await);
-        // debug!("read: {=[u8]:x}", buf.0);
+//         info!("programming...");
+//         unwrap!(qspi.write(i * PAGE_SIZE, &buf.0).await);
+//     }
 
-        let previous = different_bytes;
-        info!("verifying...");
-        for j in 0..PAGE_SIZE {
-            if buf.0[j] != pattern((j + i * PAGE_SIZE) as u32) {
-                success = false;
-                different_bytes += 1;
-                defmt::warn!("invalid byte at offset {}", j);
-            }
-        }
+//     let mut different_bytes = 0;
+//     let mut success = true;
+//     for i in 0..8 {
+//         info!("page {:?}: reading... ", i);
+//         unwrap!(qspi.read(i * PAGE_SIZE, &mut buf.0).await);
+//         // debug!("read: {=[u8]:x}", buf.0);
 
-        if previous != different_bytes {
-            defmt::warn!("failed to verify page");
-        }
+//         let previous = different_bytes;
+//         info!("verifying...");
+//         for j in 0..PAGE_SIZE {
+//             if buf.0[j] != pattern((j + i * PAGE_SIZE) as u32) {
+//                 success = false;
+//                 different_bytes += 1;
+//                 defmt::warn!("invalid byte at offset {}", j);
+//             }
+//         }
 
-        cortex_m::asm::delay(1000000);
-    }
+//         if previous != different_bytes {
+//             defmt::warn!("failed to verify page");
+//         }
 
-    info!(
-        "done! success = {}, different_bytes = {}, last = {}",
-        success, different_bytes, buf.0[0]
-    );
-}
+//         cortex_m::asm::delay(1000000);
+//     }
+
+//     info!(
+//         "done! success = {}, different_bytes = {}, last = {}",
+//         success, different_bytes, buf.0[0]
+//     );
+// }
