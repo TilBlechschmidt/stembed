@@ -6,11 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["runtime"]
-api = ["std"]
+default = ["api", "runtime"]
+api = ["std", "tokio"]
 runtime = []
 
-std = []
+std = ["futures/std"]
 
 [dependencies]
 cofit = { path = "../cofit" }
@@ -19,3 +19,5 @@ engine = { path = "../engine" }
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 embedded-storage-async = "0.3.0"
 critical-section = "0.2.7"
+
+tokio = { version = "1.20", features = ["time"], default-features = false, optional = true }

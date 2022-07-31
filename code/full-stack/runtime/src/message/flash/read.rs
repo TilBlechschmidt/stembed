@@ -3,12 +3,14 @@ use cofit::{Message, MessageIdentifier};
 
 /// Reads a region of memory from flash. Peripheral will emit multiple FlashContent messages that cover the requested range.
 /// Additional trailing bytes may be transmitted to fill the remaining space in the last content message.
+#[derive(Copy, Clone)]
 pub struct ReadFlash<const MTU: usize> {
     pub start: U24,
     pub end: U24,
 }
 
 /// Chunk of data that has been read from flash
+#[derive(Copy, Clone)]
 pub struct FlashContent {
     pub offset: U24,
     pub data: [u8; 63 - 3],

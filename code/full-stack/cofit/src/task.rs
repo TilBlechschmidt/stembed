@@ -77,3 +77,27 @@ macro_rules! make_receiver_task {
         }
     };
 }
+
+/// Variant of [`make_receiver_task`](self::make_receiver_task) that takes ownership its parameters
+#[macro_export]
+macro_rules! make_owned_receiver_task {
+    ($receiver:expr, [$($handler:expr),+ $(,)?]) => {
+        {
+            use $crate::Handler;
+
+            // TODO Verify that all handler message types are registered in the $receiver.registry
+
+            async move {
+                loop {
+                    let (identifier, packet) = $receiver.recv().await;
+
+                    $(
+                    if let Ok(handle_fut) = $handler.handle_raw(identifier, &packet) {
+                        handle_fut.await;
+                    }
+                    )+
+                }
+            }
+        }
+    };
+}

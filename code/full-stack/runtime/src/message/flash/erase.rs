@@ -1,12 +1,14 @@
 use cofit::{Message, MessageIdentifier};
 
 /// Erases a range of sectors in the flash back to `1`
+#[derive(Copy, Clone)]
 pub struct EraseFlash<const MTU: usize> {
     pub start_sector: u16,
     pub end_sector: u16,
 }
 
 /// Confirms that the given sectors have been erased
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct FlashErased<const MTU: usize> {
     pub start_sector: u16,
     pub end_sector: u16,

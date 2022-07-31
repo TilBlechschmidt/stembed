@@ -3,15 +3,17 @@ use cofit::{Message, MessageIdentifier};
 
 /// Writes a region of memory to flash without erasing, requires proper alignment.
 #[repr(C, align(4))]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct WriteFlash {
     pub data: [u8; 63 - 3],
     pub offset: U24,
 }
 
 /// Acknowledges a write message and confirms that the data has been written
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct FlashWritten {
-    pub offset: U24,
     pub data: [u8; 63 - 3],
+    pub offset: U24,
 }
 
 impl Message<63> for WriteFlash {
@@ -45,6 +47,15 @@ impl From<WriteFlash> for FlashWritten {
         Self {
             offset: write.offset,
             data: write.data,
+        }
+    }
+}
+
+impl From<FlashWritten> for WriteFlash {
+    fn from(written: FlashWritten) -> Self {
+        Self {
+            offset: written.offset,
+            data: written.data,
         }
     }
 }
