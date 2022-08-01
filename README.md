@@ -2,7 +2,7 @@
 
 Project to develop a fully embeddable Stenography engine that can run virtually anywhere with just a few kilobytes of memory and very little computing power.
 
-For more details, consult the [`docs/`](/docs) directory. This project is in a pre-alpha state and it is not recommended to use it unless you really know what you are getting yourself into.
+For more details, consult the [`docs/`](/docs) directory and make sure to read the [Goals](Goals.md)! This project is in a pre-alpha state and it is not recommended to use it unless you really know what you are getting yourself into.
 
 ## FAQ
 
