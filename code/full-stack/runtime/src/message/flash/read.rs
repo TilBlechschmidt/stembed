@@ -10,10 +10,11 @@ pub struct ReadFlash<const MTU: usize> {
 }
 
 /// Chunk of data that has been read from flash
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
+#[repr(C, align(4))]
 pub struct FlashContent {
-    pub offset: U24,
     pub data: [u8; 63 - 3],
+    pub offset: U24,
 }
 
 impl<const MTU: usize> Message<MTU> for ReadFlash<MTU> {

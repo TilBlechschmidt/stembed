@@ -1,15 +1,15 @@
 use super::UsbBus;
-use defmt::{debug, warn};
-use embassy::{
-    blocking_mutex::raw::NoopRawMutex,
-    channel::mpmc::{Channel, Receiver, Sender},
-    time::Duration,
-    util::Forever,
-};
+use defmt::warn;
+use embassy_nrf::usb::PowerUsb;
 use embassy_usb::{control::OutResponse, driver::Driver, Builder};
 use embassy_usb_hid::{HidReaderWriter, ReportId, RequestHandler, State};
+use embassy_util::{
+    blocking_mutex::raw::NoopRawMutex,
+    channel::mpmc::{Channel, Receiver},
+    Forever,
+};
+use engine::OutputCommand;
 use futures::{future::join, sink, Sink};
-use shittyruntime::firmware::AsyncOutputCommand;
 use usbd_hid::descriptor::{KeyboardReport, SerializedDescriptor};
 
 const POLL_INTERVAL_MS: u8 = 1;
@@ -40,9 +40,11 @@ pub fn configure<D: Driver<'static>>(
     )
 }
 
-#[embassy::task]
+#[embassy_executor::task]
 pub async fn run(
-    runtime: KeyboardRuntime<embassy_nrf::usb::Driver<'static, embassy_nrf::peripherals::USBD>>,
+    runtime: KeyboardRuntime<
+        embassy_nrf::usb::Driver<'static, embassy_nrf::peripherals::USBD, PowerUsb>,
+    >,
 ) {
     let (reader, mut writer) = runtime.reader_writer.split();
 
@@ -164,13 +166,13 @@ impl<'c> Keyboard<'c> {
         }
     }
 
-    pub fn into_sink(self) -> impl Sink<AsyncOutputCommand> + 'c {
+    pub fn into_sink(self) -> impl Sink<OutputCommand> + 'c {
         sink::unfold(self.0, |channel, command| async move {
             match command {
-                AsyncOutputCommand::Write(character) => {
+                OutputCommand::Write(character) => {
                     channel.send(Key::Character(character)).await;
                 }
-                AsyncOutputCommand::Backspace(count) => {
+                OutputCommand::Backspace(count) => {
                     for _ in 0..count {
                         channel.send(Key::Backspace).await;
                     }
@@ -199,15 +201,6 @@ impl RequestHandler for GlobalRequestHandler {
     fn set_report(&self, _id: ReportId, _data: &[u8]) -> OutResponse {
         // debug!("Set report for {:?}: {=[u8]}", id, data);
         OutResponse::Accepted
-    }
-
-    fn set_idle(&self, _id: Option<ReportId>, _dur: Duration) {
-        // debug!("Set idle rate for {:?} to {:?}", id, dur);
-    }
-
-    fn get_idle(&self, _id: Option<ReportId>) -> Option<Duration> {
-        // debug!("Get idle rate for {:?}", id);
-        None
     }
 }
 

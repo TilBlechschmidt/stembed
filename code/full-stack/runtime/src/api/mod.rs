@@ -17,7 +17,7 @@ pub struct RuntimeAPI<'t, T: Transport<63>> {
 }
 
 impl<'t, T: Transport<63>> RuntimeAPI<'t, T> {
-    fn new(transport: &'t T) -> (impl Future + 't, Self) {
+    pub fn new(transport: &'t T) -> (impl Future + 't, Self) {
         let (tx, rx) = make_network! {
             role:       Host,
             transport:  transport,
@@ -43,8 +43,12 @@ impl<'t, T: Transport<63>> RuntimeAPI<'t, T> {
         (rx_task, Self { tx, flash })
     }
 
+    pub async fn reset(&self) {
+        self.tx.reset_peripheral().await;
+    }
+
     /// Acquires a mutable handle to the flash API
-    async fn flash(&self) -> impl DerefMut<Target = FlashAPI<'t, T>> + '_ {
+    pub async fn flash(&self) -> impl DerefMut<Target = FlashAPI<'t, T>> + '_ {
         self.flash.lock().await
     }
 }

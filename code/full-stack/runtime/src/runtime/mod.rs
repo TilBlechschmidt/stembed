@@ -67,6 +67,6 @@ impl Runtime {
         pin_mut!(usb_rx_task);
 
         // Run the runtime :)
-        select(flash_task, usb_rx_task).await;
+        select(usb_rx_task, flash_task).await;
     }
 }

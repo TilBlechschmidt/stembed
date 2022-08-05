@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["api", "runtime"]
+default = ["runtime"]
 api = ["std", "tokio"]
-runtime = []
+runtime = ["defmt"]
 
 std = ["futures/std"]
 
@@ -21,3 +21,5 @@ embedded-storage-async = "0.3.0"
 critical-section = "0.2.7"
 
 tokio = { version = "1.20", features = ["time"], default-features = false, optional = true }
+
+defmt = { version = "0.3", optional = true }

@@ -4,5 +4,12 @@ members = [
     "cofit",
     "engine",
     "runtime",
+]
+
+exclude = [
+    # For now there is no user-friendly way to allow
+    # both the custom .cargo configuration which only
+    # applies to the firmware, while also having it in
+    # this workspace without affecting other crates ...
     "firmware",
 ]

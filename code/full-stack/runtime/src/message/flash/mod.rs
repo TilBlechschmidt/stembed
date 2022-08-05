@@ -37,7 +37,7 @@ impl From<[u8; 3]> for U24 {
 impl From<U24> for [u8; 3] {
     fn from(number: U24) -> Self {
         let bytes = number.0.to_be_bytes();
-        [bytes[0], bytes[1], bytes[2]]
+        [bytes[1], bytes[2], bytes[3]]
     }
 }
 

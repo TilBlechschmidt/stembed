@@ -1,19 +1,12 @@
-use core::{
-    mem,
-    sync::atomic::{AtomicBool, Ordering},
-};
-use defmt::{debug, info, unwrap, warn};
-use embassy::{
-    channel::signal::Signal,
-    util::{select, select3, Either, Either3, Forever},
-};
+use core::sync::atomic::{AtomicBool, Ordering};
+use defmt::{debug, unwrap};
 use embassy_nrf::{
-    interrupt::{self, InterruptExt},
-    pac,
+    interrupt::{self},
     peripherals::USBD,
-    usb::{self, Driver},
+    usb::{self, Driver, PowerUsb, UsbSupply},
 };
 use embassy_usb::{Builder, Config, DeviceStateHandler};
+use embassy_util::{channel::signal::Signal, select, Either, Forever};
 
 pub mod channel;
 pub mod keyboard;
@@ -23,9 +16,6 @@ static REMOTE_WAKEUP: Signal<()> = Signal::new();
 
 static SUSPENDED: AtomicBool = AtomicBool::new(false);
 static CONFIGURED: AtomicBool = AtomicBool::new(false);
-static CONNECTED: AtomicBool = AtomicBool::new(false);
-
-static VBUS_CONNECTED_NOTIFIER: Signal<bool> = Signal::new();
 
 static DEVICE_DESCRIPTOR: Forever<[u8; 256]> = Forever::new();
 static CONFIG_DESCRIPTOR: Forever<[u8; 256]> = Forever::new();
@@ -48,17 +38,16 @@ impl UsbBus {
     pub fn is_configured() -> bool {
         CONFIGURED.load(Ordering::Acquire)
     }
-
-    pub fn is_connected() -> bool {
-        CONNECTED.load(Ordering::Acquire)
-    }
 }
 
-pub fn configure(usbd: USBD, config: Config<'static>) -> Builder<Driver<USBD>> {
+pub fn configure<P: UsbSupply + 'static>(
+    usbd: USBD,
+    config: Config<'static>,
+    supply: P,
+) -> Builder<Driver<USBD, P>> {
     super::clock::enable_high_frequency_oscillator();
-    configure_power_interrupt();
 
-    let driver = usb::Driver::new(usbd, interrupt::take!(USBD));
+    let driver = usb::Driver::new(usbd, interrupt::take!(USBD), supply);
 
     Builder::new(
         driver,
@@ -71,41 +60,15 @@ pub fn configure(usbd: USBD, config: Config<'static>) -> Builder<Driver<USBD>> {
     )
 }
 
-#[embassy::task]
-pub async fn run(runtime: Builder<'static, Driver<'static, USBD>>) {
+#[embassy_executor::task]
+pub async fn run(runtime: Builder<'static, Driver<'static, USBD, PowerUsb>>) {
     let mut usb = runtime.build();
 
-    enable_command().await;
     loop {
-        match select(usb.run_until_suspend(), VBUS_CONNECTED_NOTIFIER.wait()).await {
-            Either::First(_) => {}
-            Either::Second(enable) => {
-                if enable {
-                    warn!("Enable when already enabled!");
-                } else {
-                    usb.disable().await;
-                    enable_command().await;
-                }
-            }
-        }
-
-        match select3(
-            usb.wait_resume(),
-            VBUS_CONNECTED_NOTIFIER.wait(),
-            REMOTE_WAKEUP.wait(),
-        )
-        .await
-        {
-            Either3::First(_) => (),
-            Either3::Second(enable) => {
-                if enable {
-                    warn!("Enable when already enabled!");
-                } else {
-                    usb.disable().await;
-                    enable_command().await;
-                }
-            }
-            Either3::Third(_) => unwrap!(usb.remote_wakeup().await),
+        usb.run_until_suspend().await;
+        match select(usb.wait_resume(), REMOTE_WAKEUP.wait()).await {
+            Either::First(_) => (),
+            Either::Second(_) => unwrap!(usb.remote_wakeup().await),
         }
     }
 }
@@ -157,47 +120,6 @@ impl DeviceStateHandler for GlobalStateHandler {
             } else {
                 debug!("Device resumed, the Vbus current limit is 100mA");
             }
-        }
-    }
-}
-
-fn configure_power_interrupt() {
-    let power: pac::POWER = unsafe { mem::transmute(()) };
-    let power_irq = interrupt::take!(POWER_CLOCK);
-
-    power_irq.set_handler(on_power_interrupt);
-    power_irq.unpend();
-    power_irq.enable();
-
-    power
-        .intenset
-        .write(|w| w.usbdetected().set().usbremoved().set());
-}
-
-fn on_power_interrupt(_: *mut ()) {
-    let regs = unsafe { &*pac::POWER::ptr() };
-
-    if regs.events_usbdetected.read().bits() != 0 {
-        regs.events_usbdetected.reset();
-        info!("Vbus detected, enabling USB...");
-        VBUS_CONNECTED_NOTIFIER.signal(true);
-        CONNECTED.store(true, Ordering::Release);
-    }
-
-    if regs.events_usbremoved.read().bits() != 0 {
-        regs.events_usbremoved.reset();
-        info!("Vbus removed, disabling USB...");
-        VBUS_CONNECTED_NOTIFIER.signal(false);
-        CONNECTED.store(false, Ordering::Release);
-    }
-}
-
-async fn enable_command() {
-    loop {
-        if VBUS_CONNECTED_NOTIFIER.wait().await {
-            break;
-        } else {
-            warn!("Received disable signal when already disabled!");
         }
     }
 }

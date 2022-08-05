@@ -24,12 +24,6 @@ impl<'f, 't, F: AsyncNorFlash, T: Transport<63>> Handler<63> for FlashWriteHandl
 
     fn handle<'s>(&'s self, message: Self::Message) -> Self::RecvFut<'s> {
         async move {
-            if *message.offset % 4 != 0 {
-                // TODO Print a warning that someone attempted unaligned flash writes.
-                //      Maybe even send a error message back? Might be sufficient to have it as log output as this counts as "API abuse"
-                return;
-            }
-
             let result = self
                 .flash
                 .lock()

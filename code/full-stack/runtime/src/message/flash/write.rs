@@ -10,7 +10,7 @@ pub struct WriteFlash {
 }
 
 /// Acknowledges a write message and confirms that the data has been written
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct FlashWritten {
     pub data: [u8; 63 - 3],
     pub offset: U24,

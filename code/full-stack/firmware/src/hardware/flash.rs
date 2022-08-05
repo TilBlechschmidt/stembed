@@ -1,4 +1,4 @@
-use defmt::{debug, info, unwrap};
+use defmt::{debug, unwrap};
 use embassy_nrf::{
     gpio::AnyPin,
     interrupt,
@@ -6,8 +6,8 @@ use embassy_nrf::{
     qspi::{self, Config, Qspi},
 };
 use embedded_storage_async::nor_flash::AsyncNorFlash;
-
-const PAGE_SIZE: usize = 4096;
+use embassy_executor::time::Duration;
+use embassy_executor::time::Timer;
 
 /// Configures a W25Q128FV flash chip connected to the given pins for operation
 pub async fn configure<const FLASH_SIZE: usize>(
@@ -21,10 +21,15 @@ pub async fn configure<const FLASH_SIZE: usize>(
 ) -> impl AsyncNorFlash {
     let irq = interrupt::take!(QSPI);
     let mut config = Config::default();
-    config.read_opcode = qspi::ReadOpcode::READ4O;
-    config.write_opcode = qspi::WriteOpcode::PP4O;
+    config.read_opcode = qspi::ReadOpcode::FASTREAD;
+    config.write_opcode = qspi::WriteOpcode::PP;
     config.write_page_size = qspi::WritePageSize::_256BYTES;
     config.deep_power_down = None;
+
+    // Make everything nice and slow so it can work with sketchy jumper-wired flash chips
+    config.frequency = qspi::Frequency::M2;
+    config.spi_mode = qspi::SpiMode::MODE3;
+    config.sck_delay = 255;
 
     let mut qspi = Qspi::<_, FLASH_SIZE>::new(
         peripheral,
@@ -45,10 +50,13 @@ pub async fn configure<const FLASH_SIZE: usize>(
     unwrap!(qspi.custom_instruction(0xAB, &[], &mut []).await);
 
     // Enable writes to the status registers
-    unwrap!(qspi.custom_instruction(0x06, &[], &mut []).await);
+    // TODO Ideally we want to check the value, then if it isn't the expected value write it once non-volatile
+    unwrap!(qspi.custom_instruction(0x06, &[], &mut []).await); // non-volatile write
+    // unwrap!(qspi.custom_instruction(0x50, &[], &mut []).await); // volatile write
 
     // Activate QSPI mode
     unwrap!(qspi.custom_instruction(0x31, &[0x02], &mut []).await);
+    Timer::after(Duration::from_millis(1)).await;
 
     // Verify that QSPI mode was enabled
     let mut status = [0u8; 1];
@@ -62,8 +70,20 @@ pub async fn configure<const FLASH_SIZE: usize>(
     debug!("flash chip JEDEC identifier: {=[u8]:x}", id);
     assert_eq!(id, [0xEF, 0x40, 0x18]);
 
+    // Enable high output-pin drive for flash reads
+    unwrap!(qspi.custom_instruction(0x11, &[0x00], &mut []).await);
+    Timer::after(Duration::from_millis(1)).await;
+
+    // Verify that high-drive is enabled
+    let mut status = [0u8; 1];
+    unwrap!(qspi.custom_instruction(0x15, &[], &mut status).await);
+    debug!("flash chip status register #3: {=[u8]:x}", status);
+    assert_eq!(status[0] & 0b01100000, 0);
+
     qspi
 }
+
+// const PAGE_SIZE: usize = 4096;
 
 // #[derive(defmt::Format)]
 // #[repr(C, align(4))]

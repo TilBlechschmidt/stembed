@@ -7,3 +7,7 @@ edition = "2021"
 
 [dependencies]
 cofit = { path = "../cofit", features = ["usb"] }
+runtime = { path = "../runtime", features = ["api"], default-features = false }
+
+tokio = { version = "1", features = ["full"] }
+hidapi = "1.4.1"

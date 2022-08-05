@@ -1,11 +1,11 @@
 use super::{MessageID, MessageIdentifier};
 
 /// Statically allocated ID for resetting all assignments
-pub(crate) const RESET_ID: MessageID = MessageID::MAX - 1;
+pub(crate) const RESET_ID: MessageID = MessageID::MAX;
 pub(crate) const RESET_IDENTIFIER: MessageIdentifier<'static> = "net.reset";
 
 /// Statically allocated ID for making new assignments
-pub(crate) const ASSIGN_ID: MessageID = MessageID::MAX - 2;
+pub(crate) const ASSIGN_ID: MessageID = MessageID::MAX - 1;
 pub(crate) const ASSIGN_IDENTIFIER: MessageIdentifier<'static> = "net.assign";
 
 /// Typed data packet sent over the wire, identified by a [`MessageIdentifier`](super::MessageIdentifier)

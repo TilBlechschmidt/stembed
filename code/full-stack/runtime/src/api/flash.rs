@@ -8,21 +8,27 @@ use futures::StreamExt;
 use futures::{channel::mpsc, SinkExt};
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::time::timeout;
 
+const CHUNK_SIZE: usize = 60;
 const SECTOR_SIZE: u32 = 4096;
 
 // Timeouts are per unit (sectors for erase, message for write/read)
-const TIMEOUT_WRITE: Duration = Duration::from_millis(5);
-const TIMEOUT_READ: Duration = Duration::from_millis(5);
+const TIMEOUT_READ: Duration = Duration::from_millis(25);
+const TIMEOUT_WRITE: Duration = Duration::from_millis(25);
 const TIMEOUT_ERASE: Duration = Duration::from_secs(1);
 
+const WRITE_INTERVAL: Duration = Duration::from_nanos(250000);
+
+#[derive(Debug)]
 enum FlashMessage {
     Content(FlashContent),
     Written(FlashWritten),
     Erased(FlashErased<63>),
 }
 
+#[derive(Debug)]
 pub enum FlashError {
     /// Data transmission was not acknowledged within time
     TimedOut,
@@ -47,11 +53,8 @@ impl<'t, T: Transport<63>> FlashAPI<'t, T> {
         )
     }
 
+    // TODO Build a version of this which implements AsyncRead with a method to pre-fetch and alternatively have it continously re-issue read requests
     pub async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), FlashError> {
-        if offset % 4 != 0 {
-            panic!("attempted to write unaligned data to flash")
-        }
-
         let message: ReadFlash<63> = ReadFlash {
             start: offset.into(),
             end: (offset + bytes.len() as u32).into(),
@@ -72,12 +75,20 @@ impl<'t, T: Transport<63>> FlashAPI<'t, T> {
                             chunk.copy_from_slice(&content.data[0..chunk.len()]);
                             break;
                         }
-                        _ => {} // TODO Print a warning that we received an unexpected flash message
+                        _ => {
+                            // TODO Print a warning that we received an unexpected flash message
+                            println!(
+                                "received unexpected flash message (expected_offset={offset}): {:?}",
+                                msg
+                            );
+                        }
                     }
                 }
             };
 
-            _ = timeout(TIMEOUT_READ, content_fut).await;
+            if timeout(TIMEOUT_READ, content_fut).await.is_err() {
+                return Err(FlashError::TimedOut);
+            }
         }
 
         Ok(())
@@ -113,59 +124,19 @@ impl<'t, T: Transport<63>> FlashAPI<'t, T> {
         }
     }
 
-    pub async fn write(&mut self, offset: u32, data: &[u8]) -> Result<(), FlashError> {
-        if offset % 4 != 0 || data.len() % 4 != 0 {
-            panic!("attempted to write unaligned data to flash")
-        }
-        // Build a work queue
-        let mut pending_writes: HashSet<WriteFlash> = data
-            .chunks(60)
-            .enumerate()
-            .map(|(i, chunk)| {
-                let offset = (offset + 60 * i as u32).into();
-                let mut data = [1; 60];
-                data[0..chunk.len()].copy_from_slice(chunk);
+    #[must_use]
+    pub fn write<'s>(&'s mut self, offset: u32, data: &'s [u8]) -> FlashWriteTask<'s, 't, T> {
+        FlashWriteTask::new(self, data, offset)
 
-                WriteFlash { data, offset }
-            })
-            .collect();
-
-        // Create a handler for ACKs
-        let handle_ack = |pending_writes: &mut HashSet<WriteFlash>, msg: FlashMessage| match msg {
-            FlashMessage::Written(ack) => {
-                if !pending_writes.remove(&ack.into()) {
-                    // TODO Print a warning that we received an ACK for something we did not write
-                }
-            }
-            _ => {} // TODO Print a warning that we received an unexpected flash message
-        };
-
-        // Discard any pending messages
-        self.clear_rx();
-
-        // Try sending each item a couple of times
-        let mut retry_limit = 3;
-        while !pending_writes.is_empty() && retry_limit > 0 {
-            // Send all remaining chunks
-            for message in pending_writes.iter() {
-                // TODO Progressively slow down with each while loop iteration
-                self.tx.send(*message).await;
-            }
-
-            for _ in 0..pending_writes.len() {
-                if let Ok(Some(msg)) = timeout(TIMEOUT_WRITE, self.rx.next()).await {
-                    handle_ack(&mut pending_writes, msg);
-                }
-            }
-
-            retry_limit -= 1;
-        }
-
-        if retry_limit == 0 {
-            Err(FlashError::TimedOut)
-        } else {
-            Ok(())
-        }
+        // TODO Figure out the lifetimes for making it return a stream instead
+        // stream::unfold(Some(task), |task| async move {
+        //     let mut task = task?;
+        //     match task.next().await {
+        //         Ok(Some(progress)) => Some((Ok(progress), Some(task))),
+        //         Ok(None) => None,
+        //         Err(error) => Some((Err(error), None)),
+        //     }
+        // })
     }
 
     fn clear_rx(&mut self) {
@@ -230,5 +201,94 @@ impl Handler<63> for FlashEraseHandler {
                 .await
                 .ok();
         }
+    }
+}
+
+pub struct FlashWriteTask<'r, 't, T: Transport<63>> {
+    flash: &'r mut FlashAPI<'t, T>,
+    data: &'r [u8],
+    offset: u32,
+    count: u32,
+    queue: HashSet<usize>,
+}
+
+impl<'r, 't, T: Transport<63>> FlashWriteTask<'r, 't, T> {
+    fn new(flash: &'r mut FlashAPI<'t, T>, data: &'r [u8], offset: u32) -> Self {
+        let chunk_count = data.chunks(CHUNK_SIZE).count();
+
+        Self {
+            flash,
+            data,
+            offset,
+            count: chunk_count as u32,
+            queue: (0..chunk_count).collect(),
+        }
+    }
+
+    pub async fn next(&mut self) -> Result<Option<f64>, FlashError> {
+        let remaining = self.queue.len();
+        let next_fut = async {
+            loop {
+                let new_remaining = self.try_next().await?;
+                if remaining != new_remaining {
+                    return Some(1.0 - (new_remaining as f64 / self.count as f64));
+                }
+            }
+        };
+
+        timeout(TIMEOUT_WRITE, next_fut)
+            .await
+            .map_err(|_| FlashError::TimedOut)
+    }
+
+    async fn try_next(&mut self) -> Option<usize> {
+        // Get the next item from the work queue
+        let index: usize = *(self.queue.iter().next()?);
+        self.queue.remove(&index);
+
+        // Send the data
+        let start = Instant::now();
+        let message = self.message(index)?;
+        self.flash.tx.send(message).await;
+
+        // Look if we have some ACK waiting :)
+        let _ = timeout(
+            WRITE_INTERVAL - start.elapsed().max(WRITE_INTERVAL),
+            self.wait_for_ack(),
+        )
+        .await;
+
+        Some(self.queue.len())
+    }
+
+    async fn wait_for_ack(&mut self) {
+        match self.flash.rx.next().await {
+            Some(FlashMessage::Written(ack)) => {
+                let index = self.index_from_offset(*ack.offset);
+                if !(Some(ack.into()) == self.message(index) && self.queue.remove(&index)) {
+                    // TODO Print a warning that we received an ACK for something we did not write
+                }
+            }
+            _ => {} // TODO Print a warning that we received an unexpected flash message
+        }
+    }
+
+    fn message(&self, index: usize) -> Option<WriteFlash> {
+        let chunk = self
+            .data
+            .chunks(CHUNK_SIZE)
+            .skip(index)
+            .next()
+            .expect("attempted to build chunk for non-existent index");
+        let offset = (self.offset + (index * CHUNK_SIZE) as u32).into();
+
+        let mut data = [255; CHUNK_SIZE];
+        data[0..chunk.len()].copy_from_slice(chunk);
+
+        Some(WriteFlash { data, offset })
+    }
+
+    fn index_from_offset(&self, offset: u32) -> usize {
+        (offset - self.offset) as usize / CHUNK_SIZE
     }
 }

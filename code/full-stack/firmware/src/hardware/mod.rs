@@ -2,6 +2,8 @@ pub mod flash;
 pub mod keymatrix;
 pub mod usb;
 
+pub mod spi_flash;
+
 pub mod clock {
     pub fn enable_high_frequency_oscillator() {
         let clock: embassy_nrf::pac::CLOCK = unsafe { core::mem::transmute(()) };
@@ -11,8 +13,8 @@ pub mod clock {
 }
 
 pub mod power {
-    use embassy::util::Forever;
     use embassy_nrf::{gpio::Output, peripherals::P1_00};
+    use embassy_util::Forever;
 
     static VOLTAGE_REGULATOR_ENABLE: Forever<Output<P1_00>> = Forever::new();
 

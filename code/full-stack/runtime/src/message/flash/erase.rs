@@ -8,7 +8,7 @@ pub struct EraseFlash<const MTU: usize> {
 }
 
 /// Confirms that the given sectors have been erased
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct FlashErased<const MTU: usize> {
     pub start_sector: u16,
     pub end_sector: u16,

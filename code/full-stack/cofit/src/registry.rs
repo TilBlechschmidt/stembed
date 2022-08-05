@@ -1,5 +1,4 @@
 use crate::{Host, Peripheral};
-
 use super::{
     message::{ASSIGN_ID, ASSIGN_IDENTIFIER, RESET_ID, RESET_IDENTIFIER},
     MessageID, MessageIdentifier, Role,
@@ -25,7 +24,7 @@ pub struct IdentifierRegistry<'a, R: Role> {
 impl<'a, R: Role> IdentifierRegistry<'a, R> {
     /// Internally used ID for representing unassigned IDs (so that AtomicU8 can be used as opposed to a Option<MessageID>)
     #[doc(hidden)]
-    pub const UNASSIGNED: MessageID = MessageID::MAX;
+    pub const UNASSIGNED: MessageID = 0;
 
     /// List of statically allocated IDs which may not be used when assigning
     const RESERVED: &'static [MessageID] = &[RESET_ID, ASSIGN_ID];
@@ -83,7 +82,7 @@ impl<'a, R: Role> IdentifierRegistry<'a, R> {
 
     /// Looks up a message identifier from a message ID
     pub(crate) fn resolve(&self, id: MessageID) -> Option<MessageIdentifier<'static>> {
-        if id == MessageID::MAX {
+        if id == Self::UNASSIGNED {
             None
         } else if id == RESET_ID {
             Some(RESET_IDENTIFIER)
@@ -116,7 +115,7 @@ impl<'a> IdentifierRegistry<'a, Host> {
         &self,
     ) -> impl Iterator<Item = (MessageIdentifier<'static>, MessageID)> + '_ {
         for (new_id, (_, identifier)) in self.assignments.iter().enumerate() {
-            self.assign(new_id as u8, identifier);
+            self.assign(new_id as u8 + 1, identifier);
         }
 
         self.assignments.iter().filter_map(|(id, identifier)| {

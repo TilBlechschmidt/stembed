@@ -1,6 +1,6 @@
+use super::{MessageID, Transport};
 use core::future::Future;
 use hidapi::HidDevice;
-use super::{Transport, MessageID};
 use std::sync::{mpsc, Arc};
 use tokio::sync::{
     broadcast::{self, error::RecvError},
@@ -35,7 +35,7 @@ impl UsbHidTransport {
         // TODO Make sure the threads are cleaned up when the instance is dropped!
 
         let (hd_tx, hd_rx) = mpsc::channel::<[u8; 64]>();
-        let (dh_tx, dh_rx) = broadcast::channel(256);
+        let (dh_tx, dh_rx) = broadcast::channel(64_000);
 
         device
             .set_blocking_mode(true)
@@ -96,7 +96,7 @@ impl Transport<63> for UsbHidTransport {
                         let mut data = [0; 63];
                         data.copy_from_slice(&packet[1..]);
                         return (packet[0], data);
-                    },
+                    }
                     Err(RecvError::Lagged(_)) => continue,
                     Err(RecvError::Closed) => panic!("channel to packet receiver thread dropped"),
                 }

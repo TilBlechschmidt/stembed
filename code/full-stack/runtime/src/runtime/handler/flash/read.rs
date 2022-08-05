@@ -24,23 +24,21 @@ impl<'f, 't, F: AsyncNorFlash, T: Transport<63>> Handler<63> for FlashReadHandle
 
     fn handle<'s>(&'s self, message: Self::Message) -> Self::RecvFut<'s> {
         async move {
-            if *message.start % 4 != 0 {
-                // TODO Print a warning that someone attempted unaligned flash reads.
-                //      Maybe even send a error message back? Might be sufficient to have it as log output as this counts as "API abuse"
-                return;
-            }
-
             let mut offset = *message.start;
             while offset < *message.end {
-                let mut data = [0; 60];
-                match self.flash.lock().await.read(offset, &mut data).await {
+                let mut content = FlashContent {
+                    data: [0; 60],
+                    offset: offset.into(),
+                };
+                match self
+                    .flash
+                    .lock()
+                    .await
+                    .read(offset, &mut content.data)
+                    .await
+                {
                     Ok(_) => {
-                        self.tx
-                            .send(FlashContent {
-                                offset: offset.into(),
-                                data,
-                            })
-                            .await;
+                        self.tx.send(content).await;
                     }
                     Err(_) => {
                         // TODO Print a warning that the read failed, maybe send a error message
@@ -48,7 +46,7 @@ impl<'f, 't, F: AsyncNorFlash, T: Transport<63>> Handler<63> for FlashReadHandle
                     }
                 }
 
-                offset += 4;
+                offset += 60;
             }
         }
     }

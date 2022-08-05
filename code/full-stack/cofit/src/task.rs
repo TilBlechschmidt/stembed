@@ -70,6 +70,8 @@ macro_rules! make_receiver_task {
                     $(
                     if let Ok(handle_fut) = $handler.handle_raw(identifier, &packet) {
                         handle_fut.await;
+                        // TODO Decide whether we want to allow fall-through for e.g. logging
+                        continue;
                     }
                     )+
                 }
@@ -94,6 +96,8 @@ macro_rules! make_owned_receiver_task {
                     $(
                     if let Ok(handle_fut) = $handler.handle_raw(identifier, &packet) {
                         handle_fut.await;
+                        // TODO Decide whether we want to allow fall-through for e.g. logging
+                        continue;
                     }
                     )+
                 }

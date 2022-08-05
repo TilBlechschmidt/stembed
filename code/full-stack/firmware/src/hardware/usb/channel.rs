@@ -1,18 +1,15 @@
+use cofit::Transport;
 use core::future::Future;
-use defmt::{debug, warn, Format};
-use embassy::{
-    blocking_mutex::raw::NoopRawMutex,
-    channel::{
-        self,
-        mpmc::{Channel as EmbassyChannel, Receiver, Sender},
-    },
-    time::Duration,
-    util::Forever,
-};
+use defmt::warn;
+use embassy_nrf::usb::PowerUsb;
 use embassy_usb::{control::OutResponse, driver::Driver, Builder};
 use embassy_usb_hid::{HidReaderWriter, ReportId, RequestHandler, State};
+use embassy_util::{
+    blocking_mutex::raw::NoopRawMutex,
+    channel::mpmc::{Channel as EmbassyChannel, Receiver, Sender},
+    Forever,
+};
 use futures::future::join;
-use shittyruntime::cofit::Transport;
 use usbd_hid::descriptor::{gen_hid_descriptor, SerializedDescriptor};
 
 const POLL_INTERVAL_MS: u8 = 1;
@@ -43,16 +40,25 @@ pub struct ChannelRuntime<'r, D: Driver<'static>> {
     device_host_receiver: Receiver<'static, NoopRawMutex, Packet, OUTGOING_BUFFER_LEN>,
 }
 
-impl<'c> Transport<64> for Channel<'c> {
+impl<'c> Transport<63> for Channel<'c> {
     type TxFut<'t> = impl Future<Output = ()> + 't where Self: 't;
-    type RxFut<'t> = impl Future<Output = [u8; 64]> + 't where Self: 't;
+    type RxFut<'t> = impl Future<Output = (u8, [u8; 63])> + 't where Self: 't;
 
-    fn send<'t>(&'t self, data: [u8; 64]) -> Self::TxFut<'t> {
-        self.tx.send(Packet(data))
+    fn send<'t>(&'t self, id: u8, data: [u8; 63]) -> Self::TxFut<'t> {
+        let mut packet = [0; 64];
+        packet[0] = id;
+        packet[1..].copy_from_slice(&data);
+
+        self.tx.send(Packet(packet))
     }
 
     fn recv<'t>(&'t self) -> Self::RxFut<'t> {
-        async move { self.rx.recv().await.0 }
+        async move {
+            let packet = self.rx.recv().await.0;
+            let mut data = [0; 63];
+            data.copy_from_slice(&packet[1..]);
+            (packet[0], data)
+        }
     }
 }
 
@@ -91,11 +97,11 @@ pub fn configure<D: Driver<'static>>(
     (command_channel, runtime)
 }
 
-#[embassy::task]
+#[embassy_executor::task]
 pub async fn run(
     runtime: ChannelRuntime<
         'static,
-        embassy_nrf::usb::Driver<'static, embassy_nrf::peripherals::USBD>,
+        embassy_nrf::usb::Driver<'static, embassy_nrf::peripherals::USBD, PowerUsb>,
     >,
 ) {
     let (reader, mut writer) = runtime.reader_writer.split();
@@ -144,20 +150,11 @@ impl RequestHandler for CommandChannelRequestHandler {
 
         let command = Packet(payload);
 
-        if let Err(e) = self.host_device_sender.try_send(command) {
+        if let Err(_) = self.host_device_sender.try_send(command) {
             warn!("failed to forward host -> device command, lagging behind");
             OutResponse::Rejected
         } else {
             OutResponse::Accepted
         }
-    }
-
-    fn set_idle(&self, id: Option<ReportId>, dur: Duration) {
-        debug!("Set idle rate for {:?} to {:?}", id, dur);
-    }
-
-    fn get_idle(&self, id: Option<ReportId>) -> Option<Duration> {
-        debug!("Get idle rate for {:?}", id);
-        None
     }
 }
