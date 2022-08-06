@@ -1,8 +1,8 @@
 pub mod flash;
 pub mod keymatrix;
-pub mod usb;
-
 pub mod spi_flash;
+pub mod time;
+pub mod usb;
 
 pub mod clock {
     pub fn enable_high_frequency_oscillator() {

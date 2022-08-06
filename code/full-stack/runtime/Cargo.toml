@@ -23,3 +23,6 @@ critical-section = "0.2.7"
 tokio = { version = "1.20", features = ["time"], default-features = false, optional = true }
 
 defmt = { version = "0.3", optional = true }
+
+# For now we just import the old engine until we figure out how to do things properly :)
+shittyengine = { path = "../../shittyengine" }

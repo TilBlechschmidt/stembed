@@ -8,15 +8,15 @@ use std::collections::HashSet;
 use std::fmt::Write;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = "/Users/tibl/Library/Application Support/plover/main.json";
-    let content = std::fs::read_to_string(path)?;
-    let (tree, buffer) = Compiler::compile_from_json(content.as_str());
-    let info = TreeInfo::new(&tree);
+    // let path = "/Users/tibl/Library/Application Support/plover/main.json";
+    // let content = std::fs::read_to_string(path)?;
+    // let (tree, buffer) = Compiler::compile_from_json(content.as_str());
+    // let info = TreeInfo::new(&tree);
 
-    println!("{info}");
-    println!("total bytes: {}", buffer.len());
+    // println!("{info}");
+    // println!("total bytes: {}", buffer.len());
 
-    std::fs::write("./dict.bin", &buffer)?;
+    // std::fs::write("./dict.bin", &buffer)?;
 
     Ok(())
 }

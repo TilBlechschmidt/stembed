@@ -1,5 +1,7 @@
 //! Tools to parse and compile data used by the operational engine like dictionaries and grammar rules
 
+use core::future::Future;
+
 use crate::{
     dict::{DataSource, RadixTreeDictionary},
     formatter::FormatterCommand,
@@ -20,7 +22,7 @@ impl Compiler {
     /// Builds a compiled tree from a JSON dictionary. Returns the raw tree and the compiled version.
     /// Panics if the input data is invalid.
     // TODO Propagate the errors instead of panicking
-    pub fn compile_from_json(json: &str) -> (TreeNode, Vec<u8>) {
+    pub async fn compile_from_json(json: &str) -> (TreeNode, Vec<u8>) {
         // 1. Parse the dictionary
         let output = json::dict(json).unwrap();
 
@@ -54,6 +56,7 @@ impl Compiler {
         // 7. Verify that all the entries are readable and return the correct translation
         let mut source = BufferedSource::new(&buffer);
         let mut dict = RadixTreeDictionary::new(&mut source)
+            .await
             .expect("failed to construct dictionary from compiled buffer");
 
         for (outline, commands) in entries {
@@ -62,6 +65,7 @@ impl Compiler {
 
             let (stroke_count, translation) = dict
                 .match_prefix(outline.iter())
+                .await
                 .expect("unexpected buffer read error while verifying dictionary")
                 .expect(&match_err);
 
@@ -87,8 +91,11 @@ impl<'b> BufferedSource<'b> {
 
 impl<'b> DataSource for &mut BufferedSource<'b> {
     type Error = ();
+    type ReadFut<'s> = impl Future<Output = Result<(), Self::Error>> + 's
+    where
+        Self: 's;
 
-    fn read_exact(&mut self, location: u32, buffer: &mut [u8]) -> Result<(), Self::Error> {
+    fn read_exact<'s>(&'s mut self, location: u32, buffer: &'s mut [u8]) -> Self::ReadFut<'s> {
         if location as usize + buffer.len() > self.buffer.len() {
             let slice = &self.buffer[location as usize..];
             buffer[0..slice.len()].copy_from_slice(slice);
@@ -96,8 +103,7 @@ impl<'b> DataSource for &mut BufferedSource<'b> {
             let range = location as usize..(location as usize + buffer.len());
             buffer.copy_from_slice(&self.buffer[range]);
         }
-
-        Ok(())
+        async move { Ok(()) }
     }
 }
 

@@ -1,10 +1,16 @@
+use core::future::Future;
+
 use crate::formatter::{AttachmentMode, CapitalizationMode, FormatterCommand};
 use crate::Stroke;
 use crate::{NODE_HEADER_SIZE, PREFIX_ARRAY_SIZE_LIMIT, TRANSLATION_SIZE_LIMIT};
 
 pub trait DataSource {
     type Error;
-    fn read_exact(&mut self, location: u32, buffer: &mut [u8]) -> Result<(), Self::Error>;
+    type ReadFut<'s>: Future<Output = Result<(), Self::Error>> + 's
+    where
+        Self: 's;
+
+    fn read_exact<'s>(&'s mut self, location: u32, buffer: &'s mut [u8]) -> Self::ReadFut<'s>;
 }
 
 pub struct RadixTreeDictionary<D: DataSource> {
@@ -13,9 +19,9 @@ pub struct RadixTreeDictionary<D: DataSource> {
 }
 
 impl<D: DataSource> RadixTreeDictionary<D> {
-    pub fn new(mut source: D) -> Result<Self, D::Error> {
+    pub async fn new(mut source: D) -> Result<Self, D::Error> {
         let mut tree_start_bytes = [0; 4];
-        source.read_exact(0, &mut tree_start_bytes)?;
+        source.read_exact(0, &mut tree_start_bytes).await?;
 
         // TODO Somehow verify that we are looking at a valid dictionary, magic number(s) at the start?
 
@@ -27,14 +33,14 @@ impl<D: DataSource> RadixTreeDictionary<D> {
 
     /// Loads the node header and prefix array into the `read_buffer`.
     /// Note that it is possible that too many bytes are read as the buffer will be filled completely each time.
-    fn read_node_at(&mut self, location: u32) -> Result<Node, D::Error> {
+    async fn read_node_at(&mut self, location: u32) -> Result<Node, D::Error> {
         let mut buffer = [0; NODE_HEADER_SIZE + PREFIX_ARRAY_SIZE_LIMIT];
-        self.source.read_exact(location, &mut buffer)?;
+        self.source.read_exact(location, &mut buffer).await?;
         Ok(Node::from((location, buffer)))
     }
 
     /// Reads the node's pointer to the given child
-    fn read_child_pointer(
+    async fn read_child_pointer(
         &mut self,
         node: Node,
         child_index: usize,
@@ -43,7 +49,7 @@ impl<D: DataSource> RadixTreeDictionary<D> {
 
         let mut buffer = [0; 3];
         let location = node.pointer_array_location() + (child_index as u32) * 3;
-        self.source.read_exact(location, &mut buffer)?;
+        self.source.read_exact(location, &mut buffer).await?;
 
         let child_pointer = u32::from_be_bytes([0, buffer[0], buffer[1], buffer[2]]);
 
@@ -55,7 +61,7 @@ impl<D: DataSource> RadixTreeDictionary<D> {
     }
 
     /// Traverses the tree finding the pointer to the translation of the entry which matches the longest prefix of the input bytes
-    fn find_longest_matching_prefix_pointer(
+    async fn find_longest_matching_prefix_pointer(
         &mut self,
         bytes: impl Iterator<Item = u8> + Clone,
     ) -> Result<Option<Match>, D::Error> {
@@ -74,7 +80,7 @@ impl<D: DataSource> RadixTreeDictionary<D> {
         // Descend down the tree until we have no more bytes left or we encounter a dead end
         loop {
             // Read the node
-            let node = self.read_node_at(location)?;
+            let node = self.read_node_at(location).await?;
 
             // Record the translation if there is one in case we have to backtrack
             if let Some(translation_pointer) = node.translation_pointer() {
@@ -101,7 +107,7 @@ impl<D: DataSource> RadixTreeDictionary<D> {
                     }
 
                     // Read and check what kind of child node we have
-                    match self.read_child_pointer(node, child_index)? {
+                    match self.read_child_pointer(node, child_index).await? {
                         ChildPointer::Node(child_node_pointer) => {
                             // Descend further down the tree
                             location = child_node_pointer;
@@ -129,24 +135,27 @@ impl<D: DataSource> RadixTreeDictionary<D> {
         Ok(latest_match)
     }
 
-    fn read_translation(&mut self, location: u32) -> Result<TranslationBuffer, D::Error> {
+    async fn read_translation(&mut self, location: u32) -> Result<TranslationBuffer, D::Error> {
         debug_assert!(location < self.tree_start);
 
         let mut buffer = [0; TRANSLATION_SIZE_LIMIT];
-        self.source.read_exact(location, &mut buffer)?;
+        self.source.read_exact(location, &mut buffer).await?;
 
         Ok(TranslationBuffer(buffer))
     }
 
-    pub fn match_prefix<'s>(
+    pub async fn match_prefix<'s>(
         &mut self,
         strokes: impl Iterator<Item = &'s Stroke> + Clone,
     ) -> Result<Option<(usize, TranslationBuffer)>, D::Error> {
         let stroke_bytes = strokes.cloned().flat_map(Stroke::into_bytes);
 
-        let matched = match self.find_longest_matching_prefix_pointer(stroke_bytes)? {
+        let matched = match self
+            .find_longest_matching_prefix_pointer(stroke_bytes)
+            .await?
+        {
             Some(matched) => {
-                let translation = self.read_translation(matched.translation_pointer)?;
+                let translation = self.read_translation(matched.translation_pointer).await?;
                 Some((matched.prefix_len / 3, translation))
             }
             None => None,

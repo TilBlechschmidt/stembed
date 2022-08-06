@@ -31,10 +31,12 @@ mod setup;
 //      Which FBD is active is a choice by the user just as regular dicts are.
 //      => Thus switching between systems becomes activating a different set of dicts+FBD (dictionary stacks could be the term)
 
+use crate::hardware::time::EmbassyTimeDriver;
+
 #[embassy_executor::main]
 async fn main(s: embassy_executor::executor::Spawner, p: embassy_nrf::Peripherals) {
     defmt::info!("Configuring peripherals");
 
     let peripherals = setup::peripherals(&s, p).await;
-    runtime::Runtime::execute(peripherals).await;
+    runtime::Runtime::execute(peripherals, EmbassyTimeDriver).await;
 }

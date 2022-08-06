@@ -14,16 +14,6 @@ use embedded_storage_async::nor_flash::AsyncNorFlash;
 use engine::{input::KeyPosition, InputState, OutputCommand};
 use futures::{Sink, Stream};
 
-// macro_rules! make_strokemap {
-//     ( $([ $($position_str:expr),* ]),* ) => {
-//         &[
-//             $(
-//                 &[$( KeyPosition::from($position_str), )*],
-//             )*
-//         ]
-//     };
-// }
-
 #[macro_export]
 macro_rules! make_keymap {
     ( $($position_str:expr),* ) => {
@@ -39,9 +29,6 @@ const USB_PID: u16 = 0xcafe;
 const FLASH_SIZE: usize = 2usize.pow(16) * 256;
 
 const ACTIVE_SCAN_PERIOD: Duration = Duration::from_millis(15);
-// const REPEAT_INTERVAL: Duration = Duration::from_millis(75);
-// const REPEAT_TRIGGER_DELAY: Duration = Duration::from_millis(150);
-// const REPEAT_MAX_TAP_DIST: Duration = Duration::from_millis(250);
 
 // #[rustfmt::skip]
 // const KEYMAP_LEFT: &[Option<KeyPosition>] = make_keymap![
@@ -57,51 +44,12 @@ const ACTIVE_SCAN_PERIOD: Duration = Duration::from_millis(15);
 //     "REL3", "RI3", "RM3", "---", "---", "---"
 // ];
 
+#[rustfmt::skip]
 const KEYMAP: &[Option<KeyPosition>] = make_keymap![
-    "---", "LP1", "LR1", "LM1", "LI1", "LET1", "REL1", "RI1", "RM1", "RR1", "RP1", "RET1", "---",
-    "LP2", "LR2", "LM2", "LI2", "LET2", "REL2", "RI2", "RM2", "RR2", "RP2", "RET2", "---", "---",
-    "---", "LM3", "LI3", "LET3", "REL3", "RI3", "RM3", "---", "---", "---"
+     "---", "LP1", "LR1", "LM1", "LI1", "LET1", "REL1", "RI1", "RM1", "RR1", "RP1", "RET1",
+     "---", "LP2", "LR2", "LM2", "LI2", "LET2", "REL2", "RI2", "RM2", "RR2", "RP2", "RET2",
+     "---", "---", "---", "LM3", "LI3", "LET3", "REL3", "RI3", "RM3", "---", "---", "---"
 ];
-
-// const STROKE_MAP: &[&[Option<KeyPosition>]] = make_strokemap![
-//     ["LM3", "RM3"],                   // #
-//     ["LP1", "LP2"],                   // S-
-//     ["LR1"],                          // T-
-//     ["LR2"],                          // K-
-//     ["LM1"],                          // P-
-//     ["LM2"],                          // W-
-//     ["LI1"],                          // H-
-//     ["LI2"],                          // R-
-//     ["LI3"],                          // A
-//     ["LET3"],                         // O
-//     ["LET1", "LET2", "REL1", "REL2"], // *
-//     ["REL3"],                         // E
-//     ["RI3"],                          // U
-//     ["RI1"],                          // -F
-//     ["RI2"],                          // -R
-//     ["RM1"],                          // -P
-//     ["RM2"],                          // -B
-//     ["RR1"],                          // -L
-//     ["RR2"],                          // -G
-//     ["RP1"],                          // -T
-//     ["RP2"],                          // -S
-//     ["RET1"],                         // -D
-//     ["RET2"]                          // -Z
-// ];
-
-// fn stroke_from_input(input: InputState) -> Stroke {
-//     let mut state = 0u32;
-
-//     for (keys, i) in STROKE_MAP.iter().zip((0..STROKE_MAP.len()).rev()) {
-//         for key in keys.iter() {
-//             if Some(true) == key.map(|k| input.is_set(k)) {
-//                 state |= 1 << i;
-//             }
-//         }
-//     }
-
-//     Stroke::from_right_aligned(state)
-// }
 
 async fn setup_flash(
     qspi: peripherals::QSPI,
@@ -187,42 +135,13 @@ fn setup_usb(
 }
 
 fn setup_input(
-    // rows_left: [AnyPin; 3],
-    // rows_right: [AnyPin; 3],
-    // columns_left: [AnyPin; 6],
-    // columns_right: [AnyPin; 6],
     rows: [AnyPin; 3],
     columns: [AnyPin; 12],
 ) -> impl Stream<Item = InputState> {
     defmt::info!("Configuring keymatrix");
-    // let matrix_left = KeyMatrix::new(rows_left, columns_left, KEYMAP_LEFT);
-    // let matrix_right = KeyMatrix::new(rows_right, columns_right, KEYMAP_RIGHT);
-    // let scanner = MatrixScanner::new(matrix_left + matrix_right, ACTIVE_SCAN_PERIOD);
 
     let matrix = KeyMatrix::new(rows, columns, KEYMAP);
     let scanner = MatrixScanner::new(matrix, ACTIVE_SCAN_PERIOD);
-
-    // let mut grouper = KeypressGrouper::new(GroupingMode::FirstUp);
-    // let repeater = KeypressRepeater::new(
-    //     REPEAT_INTERVAL,
-    //     REPEAT_MAX_TAP_DIST,
-    //     REPEAT_TRIGGER_DELAY,
-    //     EmbassyTimer,
-    // );
-
-    // let state_stream = scanner.state();
-
-    // pin_mut!(state_stream);
-
-    // let grouped_stream = repeater
-    //     .apply_grouped_repeat(&mut state_stream, &mut grouper)
-    //     .map(stroke_from_input);
-
-    // pin_mut!(grouped_stream);
-
-    // while let Some(stroke) = grouped_stream.next().await {
-    //     defmt::info!("Stroke: {:?}", stroke);
-    // }
 
     scanner.into_state_stream()
 }

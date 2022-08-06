@@ -16,8 +16,10 @@ use futures::{future::select, pin_mut, Sink, Stream};
 mod handler;
 mod hardware;
 mod mutex;
+mod old_engine;
 
 pub use hardware::HardwareStack;
+pub use old_engine::{DurationDriver, InstantDriver, TimeDriver};
 
 #[doc(cfg(feature = "runtime"))]
 pub struct Runtime;
@@ -30,6 +32,7 @@ impl Runtime {
         O: Sink<OutputCommand>,
     >(
         hardware: HardwareStack<I, C, F, O>,
+        time_driver: impl old_engine::TimeDriver,
     ) {
         // Initialize the network stack
         let (usb_tx, usb_rx) = make_network! {
@@ -66,7 +69,11 @@ impl Runtime {
         let usb_rx_task = make_receiver_task!(usb_rx, [flash_read_handler, flash_write_handler]);
         pin_mut!(usb_rx_task);
 
+        // Build the engine task
+        let engine_task = old_engine::run(hardware.input, hardware.usb_output, &flash, time_driver);
+        pin_mut!(engine_task);
+
         // Run the runtime :)
-        select(usb_rx_task, flash_task).await;
+        select(usb_rx_task, select(engine_task, flash_task)).await;
     }
 }
