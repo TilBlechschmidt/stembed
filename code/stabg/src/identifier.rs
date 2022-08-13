@@ -6,6 +6,9 @@ pub struct ShortID(u8);
 
 pub type Identifier = &'static str;
 
+// TODO Provide a macro to make the impl easier
+//      Maybe even a derive macro 🤔
+//      https://github.com/imbolc/rust-derive-macro-guide
 pub trait Identifiable {
     const IDENTIFIER: Identifier;
 }

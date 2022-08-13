@@ -6,16 +6,13 @@ use stabg::{
     Executor, Identifiable, Identifier, ProcessorCollection,
 };
 
+#[derive(Identifiable)]
+#[identifiable(name = "test.type1")]
 struct TestType1(u8);
+
+#[derive(Identifiable)]
+#[identifiable(name = "test.type2")]
 struct TestType2(u8);
-
-impl Identifiable for TestType1 {
-    const IDENTIFIER: Identifier = "com.example.type.test1";
-}
-
-impl Identifiable for TestType2 {
-    const IDENTIFIER: Identifier = "com.example.type.test2";
-}
 
 struct TestProcessor1;
 struct TestProcessor2;
@@ -49,7 +46,7 @@ fn something() {
 
 impl Processor for TestProcessor1 {
     fn identifier(&self) -> Identifier {
-        "com.example.processor.test1"
+        "test.processor1"
     }
 
     fn load(&mut self, context: &mut InitializationContext) -> Result<(), InitializationError> {
@@ -75,7 +72,7 @@ impl Processor for TestProcessor1 {
 
 impl Processor for TestProcessor2 {
     fn identifier(&self) -> Identifier {
-        "com.example.processor.test2"
+        "test.processor2"
     }
 
     fn load(&mut self, context: &mut InitializationContext) -> Result<(), InitializationError> {

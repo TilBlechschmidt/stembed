@@ -17,6 +17,9 @@ pub use identifier::{Identifiable, Identifier, ShortID};
 #[cfg(feature = "alloc")]
 pub use collection::ProcessorCollection;
 
+#[cfg(feature = "derive")]
+pub use stabg_derive::Identifiable;
+
 pub mod context;
 pub mod processor;
 pub mod registry;

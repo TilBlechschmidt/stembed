@@ -1,21 +1,52 @@
-# Registry ✅
+# High-level TODOs
+- Build embedded execution queue ;)
+- Make processor failable by returning a Result
+- Build serialization/deserialization API for embedded/desktop
+    - Behind `serde` feature flag, make the algorithm itself exchangeable!
+- Cleanup public API of this crate, document most things!
+- Supporting crate, steno specific
+    - `InputProcessor` for desktop
+    - `make_input_processor` macro for embedded
+- Develop a concept of `PluginHost`s for desktop
+    - Each host can provide a plugin which in turn provides many processors
+- Supporting crate, WASM specific
+    - `PluginHost` based on wasmer
+        - Some kind of plugin/processor configuration, parsed for and passed into processors
+        - Granular permission/capability system to allow only required stuff (duh)
+            - Maybe with an auth middleware that is called each time a plugin is loaded
+            - On first load, it asks the user. Subsequent loads use cached permissions.
+
+# Proposed features & ideas
+- Classes of processor ordering diagnostics
+    - Output XYZ will never be used
+    - Will never be executed because inputs can't be available
+        - Analyse the dependency graph of all broken processors to detect transitive & circular dependencies
+- API features
+    - Some sort of finalizer i.e. "this is the final execution"?
+        - Problematic because it breaks the paradigm
+        - Plugins should instead be of a streaming nature
+        - Instead, provide cycle functions like "pre_cycle_start" so that a plugin can know when one batch of execs has finished
+
+# Type implementations & explanations
+
+## Registry ✅
 - Associates `&'static str` with `u8` for the runtime duration
 - Used for more efficient storage in temporary data structures
 - Trait for stack & heap based impls
 
-# TypeRegistry ✅
+## TypeRegistry ✅
 - Based on Registry
 - Plugins can register types, associating a string identifier `core.stroke` with a numeric identifier that is valid for the runtime of the application
 - Used when storing/retrieving values from the stack to translate from binary type codes to string type codes
 - Non-registered types can not be stored or retrieved! Results in Err()
 
-# ProcessorRegistry ✅
+## ProcessorRegistry ✅
 - Implicitly defined through processor order in ExecutionQueue instead of having an explicit Registry
 - Each processor will be registered before execution
 - Used for creating processor annotations
 - Aids in reverse lookup of value creator
 
-# Stack (LIFO) ✅
+## Stack (LIFO) ✅
 - Stores & retrieves slices with associated type codes
 - Basic building block to allow both non-alloc and alloc impls
 - Very simple interface
@@ -24,7 +55,7 @@
     - `get(type_code) -> data`
     - `iter()` (follows pop order)
 
-# ExecutionContext ✅
+## ExecutionContext ✅
 - Wraps `Stack`
 - Created individually for each processor invocation
     - Passed over to processor either directly or through FFI/WASM host fns
@@ -44,14 +75,14 @@
             - By always injecting them, it gives plugins the power of asking "who injected the last value of this type". Worth the overhead?
             - Mode can be set upon creation of the context, by default disabled on embedded, enabled on desktop
 
-# InitializationContext ✅
+## InitializationContext ✅
 - Passed when a plugin is first instantiated
 - Requires the plugin to define used input/output types
 	- Allows the plugin to register new types
 - Additional side-effects (like spawning threads) might occur
 	- They should be cleaned up when the destroy fn is called!
 
-# Processor / EmbeddedProcessor ✅
+## Processor / EmbeddedProcessor ✅
 - Two traits to differentiate needs and make embedded support opt-in
 	- `impl<T> Processor for T where T: EmbeddedProcessor + AutoImplProcessor`
 - Embedded processor expose more details about themselves `const`
@@ -75,13 +106,13 @@
             - It is one linear execution path, no concurrency anyways
             - Thread is spawned once and then lives forever, nothing lost by not going async
 
-# ProcessorCollection ✅
+## ProcessorCollection ✅
 - Tries to find a sensible order for processors, based on input/output specs
     - "Stable sort" so that input order can define preferences
     - Returns warnings if a processor will never get the values it wants or circular dependencies exist
 - Only on desktop, no array can be built from async traits as they are not object-safe
 
-# ExecutionQueue ✅ / AsyncExecutionQueue 🔶
+## ExecutionQueue ✅ / AsyncExecutionQueue 🔶
 - Basically a `fn` which runs all processors
 	- Gets `&mut stack, &registry` and builds ExecutionContext instances internally for each processor
 - Can skip processors / start at a given processor based on its ID
@@ -90,7 +121,7 @@
     - The macro does the verifications described in the processor collection internally and at compile-time
     - Likely no reordering possible, compiler warning will be emitted instead
 
-# Executor ✅
+## Executor ✅
 - Takes a `Stack`, and a `ExecutionQueue`
     - TODO What about input sources?
 	    - TL;DR They don't exist. Not on this crates' level.
@@ -110,25 +141,10 @@
     - Otherwise, repeat from the top
 - Uses Processor annotations to determine what to execute post revert
 
-# StackDebugger
+## StackDebugger
 - Primary job: Capture & visualize the stack contents
 - Annotates regions with type & ownership
 - Shows ValueSet brackets
 - Stack frames exported by runtime after each processor invocation, dumped to disk, later read by viewer
 	- Registries have to be dumped as well to make sense of it
 - Potential for interactive debugging in the future
-
-# External crate
-- `make_input_processor` macro for embedded
-- `InputProcessor` for desktop
-
-# Processor DX features
-- Classes of plugin errors / warnings
-	- Will never be executed because inputs can't be available
-	- Output XYZ will never be used
-		- Overwrite scenarios are considered "used" because they could be conditional
-- API features
-	- Some sort of finalizer i.e. "this is the final execution"?
-		- Problematic because it breaks the paradigm
-		- Plugins should instead be of a streaming nature
-		- Instead, provide cycle functions like "pre_cycle_start" so that a plugin can know when one batch of execs has finished
