@@ -1,5 +1,5 @@
 /// Internal identifier linked to a globally unique [`Identifier`](Identifier) through a [`Registry`](super::Registry)
-pub type ShortID = u8;
+pub type ShortID = u32;
 
 /// Globally unique identifier string in reverse-domain notation
 ///

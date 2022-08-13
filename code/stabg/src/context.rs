@@ -4,8 +4,8 @@ use crate::{
     Identifiable, Identifier, ShortID,
 };
 
-pub(crate) struct ValueSet(u8);
-pub(crate) struct ProcessorBoundary(u8);
+pub(crate) struct ValueSet(ShortID);
+pub(crate) struct ProcessorBoundary(ShortID);
 
 impl Identifiable for ValueSet {
     const IDENTIFIER: Identifier = "stabg.intrinsic.valueSet";
@@ -108,8 +108,7 @@ impl<'s, 'r> Drop for ExecutionContext<'s, 'r> {
     fn drop(&mut self) {
         let code = self.registry.lookup(ProcessorBoundary::IDENTIFIER).unwrap();
         self.stack
-            // TODO Use ProcessorBoundary struct!
-            .push(code, &[self.processor])
+            .push(code, &self.processor.to_be_bytes())
             .expect("failed to push ProcessorBoundary marker");
     }
 }
@@ -119,7 +118,7 @@ impl<'s, 'r> Drop for ExecutionContext<'s, 'r> {
 /// For more details, see [`ExecutionContext::branch`](ExecutionContext::branch)!
 pub struct ExecutionBranch<'s, 'r> {
     context: ExecutionContext<'s, 'r>,
-    value_count: u8,
+    value_count: u32,
 }
 
 impl<'s, 'r> ExecutionBranch<'s, 'r> {
@@ -141,7 +140,7 @@ impl<'s, 'r> Drop for ExecutionBranch<'s, 'r> {
     fn drop(&mut self) {
         self.context
             // TODO Use ValueSet struct!
-            .push(ValueSet::IDENTIFIER, &[self.value_count])
+            .push(ValueSet::IDENTIFIER, &self.value_count.to_be_bytes())
             .expect("failed to push ValueSet marker");
     }
 }

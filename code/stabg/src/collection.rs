@@ -164,10 +164,10 @@ impl<'r> ProcessorCollection<'r> {
                 .processors
                 .iter_mut()
                 .enumerate()
-                .map(|(i, p)| (i as u8, p))
+                .map(|(i, p)| (i as u32, p))
                 .skip_while(|(i, _)| {
                     if let Some(start) = start_id {
-                        start == *i as u8
+                        start == *i
                     } else {
                         false
                     }
@@ -175,7 +175,7 @@ impl<'r> ProcessorCollection<'r> {
 
             // Go through all processors
             for (id, processor) in pending_processors {
-                let context = ExecutionContext::new(stack, id.into(), registry);
+                let context = ExecutionContext::new(stack, id, registry);
                 let result = processor.process(context);
 
                 if self.abort_on_error {

@@ -1,22 +1,29 @@
 # High-level TODOs
+- Add remaining docs
+    - `Executor`
+    - High-level explanation of core concepts
 - Build embedded execution queue ;)
-- Make processor failable by returning a Result
 - Build serialization/deserialization API for embedded/desktop
     - Behind `serde` feature flag, make the algorithm itself exchangeable!
 - Implement alloc based stack & registry
-- Supporting crate, steno specific
+- Expose collection diagnostics on desktop
+- Build supporting crate for inputs (stabg-input?)
     - `InputProcessor` for desktop
     - `make_input_processor` macro for embedded
-- Develop a concept of `PluginHost`s for desktop
-    - Each host can provide a plugin which in turn provides many processors
-- Supporting crate, WASM specific
-    - `PluginHost` based on wasmer
-        - Some kind of plugin/processor configuration, parsed for and passed into processors
+- Develop a concept of `ProcessorHost`s for desktop
+    - Hosts load clients
+    - Clients register processors
+    - Supporting crate, WASM specific (stabg-wasm?)
+        - `ProcessorHost` impl based on wasmer
+        - Some kind of client configuration, parsed for and passed into processors
         - Granular permission/capability system to allow only required stuff (duh)
-            - Maybe with an auth middleware that is called each time a plugin is loaded
-            - On first load, it asks the user. Subsequent loads use cached permissions.
+            - Maybe with an auth middleware that is called each time a processor is loaded
+            - On first load, it asks the user — subsequent loads use cached permissions
+        - Communication via stdin/stdout
+        - Client-side SDK
 
 # Proposed features & ideas
+- Include $crate name in identifiers so you "cant" use other plugins stuff without importing them as a lib
 - Classes of processor ordering diagnostics
     - Output XYZ will never be used
     - Will never be executed because inputs can't be available
@@ -26,6 +33,7 @@
         - Problematic because it breaks the paradigm
         - Plugins should instead be of a streaming nature
         - Instead, provide cycle functions like "pre_cycle_start" so that a plugin can know when one batch of execs has finished
+- "Serialize" on embedded by either transmuting into byte slices or just straight up storing raw pointer+len and "forgetting" the memory temporarily in regards to the borrow checker
 
 # Type implementations & explanations
 

@@ -186,7 +186,7 @@ mod alloc {
     /// from or pushing onto the stack during execution. Failing to do so may initially seem to work,
     /// but can cause dependency issues down the road, especially in complex installations.
     ///
-    /// This registration logic provides the information to the [`ProcessorCollection`](super::collection::ProcessorCollection)
+    /// This registration logic provides the information to the [`ProcessorCollection`](crate::desktop::ProcessorCollection)
     /// what values you depend on and can provide. It then derives an execution order from this information!
     pub struct InitializationContext<'r> {
         type_registry: &'r mut dyn Registry,

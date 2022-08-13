@@ -27,7 +27,7 @@ impl<'s, 'r> Executor<'s, 'r> {
 
         let mut previous_processor: Option<ShortID> = None;
         let mut current_processor: Option<ShortID> = None;
-        let mut active_valueset_count: Option<u8> = None;
+        let mut active_valueset_count: Option<u32> = None;
 
         // Removes values from the stack while:
         // - Tracking the active and previously active processor
@@ -49,7 +49,9 @@ impl<'s, 'r> Executor<'s, 'r> {
                     "encountered ProcessorBoundary inside ValueSet"
                 );
                 previous_processor = current_processor;
-                current_processor = Some(value[0].into());
+                current_processor = Some(ShortID::from_be_bytes([
+                    value[0], value[1], value[2], value[3],
+                ]));
             } else if id == id_valueset {
                 debug_assert!(
                     active_valueset_count.is_none(),
@@ -59,7 +61,8 @@ impl<'s, 'r> Executor<'s, 'r> {
                     previous_processor.or(current_processor).is_some(),
                     "encountered ValueSet without active processor"
                 );
-                active_valueset_count = Some(value[0]);
+                active_valueset_count =
+                    Some(u32::from_be_bytes([value[0], value[1], value[2], value[3]]));
             } else if let Some(1) = active_valueset_count {
                 active_valueset_count = None;
             } else if let (Some(count), Some(previous_proc)) =
@@ -69,10 +72,10 @@ impl<'s, 'r> Executor<'s, 'r> {
                 // thus enough space should be available. However, since it is blackbox magic,
                 // we use expect here to play nice :)
                 self.stack
-                    .push(id_valueset, &[count - 1])
+                    .push(id_valueset, &(count - 1).to_be_bytes())
                     .expect("failed to recreate ValueSet");
                 self.stack
-                    .push(id_procbound, &[current_processor.unwrap()])
+                    .push(id_procbound, &(current_processor.unwrap()).to_be_bytes())
                     .expect("failed to recreate ValueSet proc marker");
                 return Some(previous_proc);
             }

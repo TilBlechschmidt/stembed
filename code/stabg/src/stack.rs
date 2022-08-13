@@ -43,7 +43,7 @@ pub struct FixedSizeStack<const CAPACITY: usize> {
 }
 
 impl<const CAPACITY: usize> FixedSizeStack<CAPACITY> {
-    const HEADER_SIZE: usize = 3;
+    const HEADER_SIZE: usize = 6;
 
     /// Number of extra bytes required per value
     pub const OVERHEAD: usize = Self::HEADER_SIZE;
@@ -69,8 +69,13 @@ impl<const CAPACITY: usize> FixedSizeStack<CAPACITY> {
         if offset < Self::HEADER_SIZE {
             None
         } else {
-            let id: ShortID = self.data[offset - 1].into();
-            let length = u16::from_be_bytes([self.data[offset - 3], self.data[offset - 2]]);
+            let id: ShortID = u32::from_be_bytes([
+                self.data[offset - 4],
+                self.data[offset - 3],
+                self.data[offset - 2],
+                self.data[offset - 1],
+            ]);
+            let length = u16::from_be_bytes([self.data[offset - 6], self.data[offset - 5]]);
             let range = offset - Self::HEADER_SIZE - length as usize..offset - Self::HEADER_SIZE;
             Some((id, range))
         }
@@ -97,10 +102,13 @@ impl<const CAPACITY: usize> Stack for FixedSizeStack<CAPACITY> {
         } else {
             let data_len = (data.len() as u16).to_be_bytes();
             let data_end = self.usage + data.len();
+            let data_len_end = data_end + 2;
+            let code_end = data_len_end + 4;
+            let code_bytes = code.to_be_bytes();
 
             self.data[self.usage..data_end].copy_from_slice(data);
-            self.data[data_end..data_end + 2].copy_from_slice(&data_len);
-            self.data[data_end + 2] = code;
+            self.data[data_end..data_len_end].copy_from_slice(&data_len);
+            self.data[data_len_end..code_end].copy_from_slice(&code_bytes);
 
             self.usage += data.len() + Self::HEADER_SIZE;
 
@@ -155,30 +163,30 @@ mod does {
     #[test]
     fn accept_push() {
         let mut stack = FixedSizeStack::<{ OVERHEAD + 1 }>::new();
-        stack.push(0.into(), &[42]).unwrap();
+        stack.push(0, &[42]).unwrap();
     }
 
     #[test]
     fn accept_pop() {
         let data: &[u8] = &[42];
         let mut stack = FixedSizeStack::<{ OVERHEAD + 1 }>::new();
-        stack.push(0.into(), data).unwrap();
-        assert_eq!(stack.pop(), Some((0.into(), data)));
+        stack.push(0, data).unwrap();
+        assert_eq!(stack.pop(), Some((0, data)));
     }
 
     #[test]
     fn accept_get() {
         let mut stack = FixedSizeStack::<{ (OVERHEAD + 1) * 4 }>::new();
 
-        stack.push(0.into(), &[1]).unwrap();
-        stack.push(1.into(), &[2]).unwrap();
-        stack.push(0.into(), &[3]).unwrap();
-        stack.push(1.into(), &[4]).unwrap();
-        assert_eq!(stack.get(0.into()).unwrap()[0], 3);
+        stack.push(0, &[1]).unwrap();
+        stack.push(1, &[2]).unwrap();
+        stack.push(0, &[3]).unwrap();
+        stack.push(1, &[4]).unwrap();
+        assert_eq!(stack.get(0).unwrap()[0], 3);
 
         stack.pop();
         stack.pop();
-        assert_eq!(stack.get(0.into()).unwrap()[0], 1);
+        assert_eq!(stack.get(0).unwrap()[0], 1);
     }
 
     #[test]
@@ -188,12 +196,12 @@ mod does {
 
         let mut stack = FixedSizeStack::<{ (OVERHEAD + 2) * 2 }>::new();
 
-        stack.push(0.into(), data1).unwrap();
-        stack.push(1.into(), data2).unwrap();
+        stack.push(0, data1).unwrap();
+        stack.push(1, data2).unwrap();
 
         stack.iter_reset();
-        assert_eq!(stack.iter_next(), Some((1.into(), data2)));
-        assert_eq!(stack.iter_next(), Some((0.into(), data1)));
+        assert_eq!(stack.iter_next(), Some((1, data2)));
+        assert_eq!(stack.iter_next(), Some((0, data1)));
         assert_eq!(stack.iter_next(), None);
     }
 }
