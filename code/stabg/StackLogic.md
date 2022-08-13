@@ -3,7 +3,7 @@
 - Make processor failable by returning a Result
 - Build serialization/deserialization API for embedded/desktop
     - Behind `serde` feature flag, make the algorithm itself exchangeable!
-- Cleanup public API of this crate, document most things!
+- Implement alloc based stack & registry
 - Supporting crate, steno specific
     - `InputProcessor` for desktop
     - `make_input_processor` macro for embedded

@@ -1,6 +1,7 @@
 use crate::{
     context::{ProcessorBoundary, ValueSet},
-    registry::TypeRegistry,
+    processor::ExecutionError,
+    registry::Registry,
     stack::Stack,
     Identifiable, ShortID,
 };
@@ -8,11 +9,11 @@ use core::future::Future;
 
 pub struct Executor<'s, 'r> {
     stack: &'s mut dyn Stack,
-    type_registry: &'r mut TypeRegistry,
+    type_registry: &'r mut dyn Registry,
 }
 
 impl<'s, 'r> Executor<'s, 'r> {
-    pub fn new(stack: &'s mut dyn Stack, type_registry: &'r mut TypeRegistry) -> Self {
+    pub fn new(stack: &'s mut dyn Stack, type_registry: &'r mut dyn Registry) -> Self {
         Self {
             stack,
             type_registry,
@@ -71,7 +72,7 @@ impl<'s, 'r> Executor<'s, 'r> {
                     .push(id_valueset, &[count - 1])
                     .expect("failed to recreate ValueSet");
                 self.stack
-                    .push(id_procbound, &[*current_processor.unwrap()])
+                    .push(id_procbound, &[current_processor.unwrap()])
                     .expect("failed to recreate ValueSet proc marker");
                 return Some(previous_proc);
             }
@@ -80,36 +81,43 @@ impl<'s, 'r> Executor<'s, 'r> {
         None
     }
 
-    pub fn execute_sync<F>(&mut self, execution_queue: &mut F)
+    pub fn execute_sync<F>(&mut self, execution_queue: &mut F) -> Result<(), ExecutionError>
     where
-        F: FnMut(Option<ShortID>, &mut dyn Stack, &TypeRegistry),
+        F: FnMut(Option<ShortID>, &mut dyn Stack, &dyn Registry) -> Result<(), ExecutionError>,
     {
         // Remove any remainders from previous runs
         self.stack.clear();
 
         // Run through it once completely
-        (execution_queue)(None, self.stack, self.type_registry);
+        (execution_queue)(None, self.stack, self.type_registry)?;
 
         // Repeat until there are no branches left
         while let Some(start_point) = self.next_execution_step() {
-            (execution_queue)(Some(start_point), self.stack, self.type_registry);
+            (execution_queue)(Some(start_point), self.stack, self.type_registry)?;
         }
+
+        Ok(())
     }
 
-    pub async fn execute_async<F, Fut>(&mut self, execution_queue: &mut F)
+    pub async fn execute_async<F, Fut>(
+        &mut self,
+        execution_queue: &mut F,
+    ) -> Result<(), ExecutionError>
     where
-        Fut: Future<Output = ()>,
-        F: FnMut(Option<ShortID>, &mut dyn Stack, &TypeRegistry) -> Fut,
+        Fut: Future<Output = Result<(), ExecutionError>>,
+        F: FnMut(Option<ShortID>, &mut dyn Stack, &dyn Registry) -> Fut,
     {
         // Remove any remainders from previous runs
         self.stack.clear();
 
         // Run through it once completely
-        (execution_queue)(None, self.stack, self.type_registry);
+        (execution_queue)(None, self.stack, self.type_registry).await?;
 
         // Repeat until there are no branches left
         while let Some(start_point) = self.next_execution_step() {
-            (execution_queue)(Some(start_point), self.stack, self.type_registry).await;
+            (execution_queue)(Some(start_point), self.stack, self.type_registry).await?;
         }
+
+        Ok(())
     }
 }

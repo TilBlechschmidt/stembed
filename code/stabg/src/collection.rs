@@ -1,8 +1,8 @@
 use crate::{
     context::ExecutionContext,
     identifier::ShortID,
-    processor::{InitializationContext, InitializationError, OwnedProcessor},
-    registry::TypeRegistry,
+    processor::{InitializationContext, InitializationError, OwnedProcessor, ExecutionError},
+    registry::Registry,
     stack::Stack,
     Identifier,
 };
@@ -18,26 +18,36 @@ struct LoadedProcessor {
 
 pub struct ProcessorCollection<'r> {
     processors: Vec<LoadedProcessor>,
-    type_registry: &'r mut TypeRegistry,
+    type_registry: &'r mut dyn Registry,
+    abort_on_error: bool,
 }
 
 impl<'r> ProcessorCollection<'r> {
-    pub fn new(type_registry: &'r mut TypeRegistry) -> Self {
+    pub fn new(type_registry: &'r mut dyn Registry) -> Self {
         Self {
             processors: Vec::new(),
             type_registry,
+            abort_on_error: false,
         }
+    }
+
+    pub fn abort_on_error(&mut self, enabled: bool) -> &mut Self {
+        self.abort_on_error = enabled;
+        self
     }
 
     // TODO Implement extend or generally anything that allows us to go over iterators :)
     // TODO Make a generic version which accepts any processor and internally boxes it
-    pub fn push(&mut self, mut processor: OwnedProcessor) -> Result<(), InitializationError> {
+    pub fn push(
+        &mut self,
+        mut processor: OwnedProcessor,
+    ) -> Result<&mut Self, InitializationError> {
         let mut ctx = InitializationContext::new(self.type_registry);
         processor.load(&mut ctx)?;
 
         self.processors.push(LoadedProcessor::new(processor, ctx));
 
-        Ok(())
+        Ok(self)
     }
 
     fn optimize_execution_order(&mut self) -> bool {
@@ -116,7 +126,10 @@ impl<'r> ProcessorCollection<'r> {
     }
 
     // TODO Output a list of diagnostics for further processing / display / testing :)
-    pub fn build(mut self) -> impl FnMut(Option<ShortID>, &mut dyn Stack, &TypeRegistry) {
+    pub fn build(
+        mut self,
+    ) -> impl FnMut(Option<ShortID>, &mut dyn Stack, &dyn Registry) -> Result<(), ExecutionError>
+    {
         if !self.optimize_execution_order() {
             error!("Failed to optimize execution order, some processors may fail to execute due to missing inputs");
         }
@@ -133,7 +146,7 @@ impl<'r> ProcessorCollection<'r> {
                 .map(|(i, p)| (i as u8, p))
                 .skip_while(|(i, _)| {
                     if let Some(start) = start_id {
-                        *start == *i as u8
+                        start == *i as u8
                     } else {
                         false
                     }
@@ -142,8 +155,20 @@ impl<'r> ProcessorCollection<'r> {
             // Go through all processors
             for (id, processor) in pending_processors {
                 let context = ExecutionContext::new(stack, id.into(), registry);
-                processor.process(context);
+                let result = processor.process(context);
+
+                if self.abort_on_error {
+                    result?;
+                } else if let Err(e) = result {
+                    error!(
+                        "Failed to execute processor {}: {:?}",
+                        processor.identifier(),
+                        e
+                    );
+                }
             }
+
+            Ok(())
         }
     }
 }

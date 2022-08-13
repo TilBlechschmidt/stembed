@@ -1,10 +1,35 @@
 use crate::{
-    context::ExecutionContext, identifier::ShortID, registry::TypeRegistry, Identifiable,
-    Identifier,
+    context::{ExecutionContext, ExecutionContextError},
+    identifier::ShortID,
+    registry::Registry,
+    Identifiable, Identifier,
 };
 use core::future::Future;
 
 // TODO Document what happens when not all types are provided/registered, aka death :D
+
+/// Errors encountered while executing a processor
+#[derive(Debug)]
+pub enum ExecutionError {
+    /// Transitive errors caused by the execution context passed into the processor during execution.
+    ContextError(ExecutionContextError),
+
+    /// Unknown internal error from within the plugin, unrelated to the execution context.
+    /// Turns into a `String` when the `alloc` feature is enabled!
+    #[cfg(not(feature = "alloc"))]
+    InternalError(&'static str),
+
+    /// Unknown internal error from within the plugin, unrelated to the execution context.
+    /// Turns into a `&'static str` when the `alloc` feature is not enabled!
+    #[cfg(feature = "alloc")]
+    InternalError(::alloc::string::String),
+}
+
+impl From<ExecutionContextError> for ExecutionError {
+    fn from(e: ExecutionContextError) -> Self {
+        Self::ContextError(e)
+    }
+}
 
 #[cfg(feature = "embedded")]
 pub trait EmbeddedProcessor: Identifiable {
@@ -22,7 +47,7 @@ pub trait EmbeddedProcessor: Identifiable {
     /// and undefined behaviour.
     const STACK_USAGE: usize;
 
-    type Fut<'s>: Future + 's
+    type Fut<'s>: Future<Output = Result<(), ExecutionError>> + 's
     where
         Self: 's;
 
@@ -41,6 +66,8 @@ pub use self::alloc::*;
 
 #[cfg(feature = "alloc")]
 mod alloc {
+    use crate::registry::RegistryError;
+
     use super::*;
     use ::alloc::{boxed::Box, vec::Vec};
 
@@ -54,18 +81,22 @@ mod alloc {
         fn load(&mut self, context: &mut InitializationContext) -> Result<(), InitializationError>;
 
         // TODO add execution errors (enum with ContextError or BoxedError)
-        fn process(&mut self, context: ExecutionContext);
+        fn process(&mut self, context: ExecutionContext) -> Result<(), ExecutionError>;
 
         /// Cleans up any side-effects caused by the `init` method
         fn unload(&mut self) {}
     }
 
+    /// Errors caused while initializing a dynamic [`Processor`](Processor)
     #[derive(Debug)]
     pub enum InitializationError {
-        TypeRegistrationFailed,
+        /// The type could not be registered due to a transitive error in the underlying [`Registry`](Registry)
+        TypeRegistrationFailed(RegistryError),
+        /// Unknown internal error from within the plugin, unrelated to the initialization context.
         InternalError(::alloc::string::String),
     }
 
+    /// Purposes for which a [`Processor`](Processor) will use a type
     pub enum TypeUsage {
         Input,
         Output,
@@ -73,13 +104,13 @@ mod alloc {
     }
 
     pub struct InitializationContext<'r> {
-        type_registry: &'r mut TypeRegistry,
+        type_registry: &'r mut dyn Registry,
         pub(crate) input: Vec<ShortID>,
         pub(crate) output: Vec<ShortID>,
     }
 
     impl<'r> InitializationContext<'r> {
-        pub(crate) fn new(type_registry: &'r mut TypeRegistry) -> Self {
+        pub(crate) fn new(type_registry: &'r mut dyn Registry) -> Self {
             Self {
                 type_registry,
                 input: Vec::new(),
@@ -113,9 +144,8 @@ mod alloc {
                     }
                     Ok(self)
                 }
-                Err(_) => {
-                    // There is only one error case so no use in differentiating
-                    Err(InitializationError::TypeRegistrationFailed)
+                Err(e) => {
+                    Err(InitializationError::TypeRegistrationFailed(e))
                 }
             }
         }
