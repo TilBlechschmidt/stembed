@@ -26,8 +26,11 @@ fn full_stack_example() {
 
     // Build an execution stack
     let mut processors = ProcessorCollection::new(&mut registry);
-    processors.push(Box::new(TestProcessor2)).unwrap();
-    processors.push(Box::new(TestProcessor1)).unwrap();
+    processors
+        .push(TestProcessor2)
+        .unwrap()
+        .push(TestProcessor1)
+        .unwrap();
     // Note: They are specified in reverse order, but due to their input/output dependency
     //          the ::build() command reorders them so they work properly!
     let mut execution_queue = processors.build();

@@ -5,11 +5,11 @@ edition = "2021"
 
 [features]
 # TODO Remove both by default :D
-default = ["alloc", "embedded", "derive"]
+default = ["alloc", "nightly", "derive"]
 # Switches to allocation based stack & registries
 alloc = ["log"]
-# Enables asynchronous traits & static macros for embedded use
-embedded = []
+# Enables asynchronous traits for async processors
+nightly = []
 # Enables derive macros for an easier user experience
 derive = ["stabg-derive"]
 

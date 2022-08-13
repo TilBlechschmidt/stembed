@@ -1,14 +1,17 @@
 use crate::{
     context::ExecutionContext,
+    desktop::Processor,
     identifier::ShortID,
-    processor::{InitializationContext, InitializationError, OwnedProcessor, ExecutionError},
+    processor::{ExecutionError, InitializationContext, InitializationError},
     registry::Registry,
     stack::Stack,
     Identifier,
 };
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 use core::ops::{Deref, DerefMut};
 use log::{error, warn};
+
+type OwnedProcessor = Box<dyn Processor>;
 
 struct LoadedProcessor {
     processor: OwnedProcessor,
@@ -16,6 +19,11 @@ struct LoadedProcessor {
     output: Vec<ShortID>,
 }
 
+/// Dynamically collects processors for execution
+///
+/// Will reorder processors as required by their input / output dependencies while trying to maintain the original order.
+/// Additionally, warnings will be emitted if dependencies can not be satisfied or if circular dependencies exist.
+/// This information will be exposed to callers of the [`build`](ProcessorCollection::build) function in the future.
 pub struct ProcessorCollection<'r> {
     processors: Vec<LoadedProcessor>,
     type_registry: &'r mut dyn Registry,
@@ -23,6 +31,9 @@ pub struct ProcessorCollection<'r> {
 }
 
 impl<'r> ProcessorCollection<'r> {
+    // TODO Implement extend or generally anything that allows us to go over iterators :)
+
+    /// Creates an empty collection which will register types required by processors that are added with [`push`](Self::push) into the provided registry
     pub fn new(type_registry: &'r mut dyn Registry) -> Self {
         Self {
             processors: Vec::new(),
@@ -31,14 +42,21 @@ impl<'r> ProcessorCollection<'r> {
         }
     }
 
+    /// Sets whether execution should be aborted when any single processor in the collection fails
     pub fn abort_on_error(&mut self, enabled: bool) -> &mut Self {
         self.abort_on_error = enabled;
         self
     }
 
-    // TODO Implement extend or generally anything that allows us to go over iterators :)
-    // TODO Make a generic version which accepts any processor and internally boxes it
-    pub fn push(
+    /// Adds the given processor to the collection, calling its [`load`](Processor::load) method to determine input & output dependencies
+    pub fn push<P: Processor + 'static>(
+        &mut self,
+        processor: P,
+    ) -> Result<&mut Self, InitializationError> {
+        self.push_boxed(Box::new(processor))
+    }
+
+    fn push_boxed(
         &mut self,
         mut processor: OwnedProcessor,
     ) -> Result<&mut Self, InitializationError> {
@@ -126,6 +144,9 @@ impl<'r> ProcessorCollection<'r> {
     }
 
     // TODO Output a list of diagnostics for further processing / display / testing :)
+    /// Reorders the processors as required, checks for unmet and cyclic dependencies, emits warnings for
+    /// unused outputs, and finally creates a function which can be handed to the [`Executor::execute_sync`](super::Executor::execute_sync)
+    /// function for execution.
     pub fn build(
         mut self,
     ) -> impl FnMut(Option<ShortID>, &mut dyn Stack, &dyn Registry) -> Result<(), ExecutionError>

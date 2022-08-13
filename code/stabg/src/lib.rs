@@ -1,6 +1,6 @@
 #![no_std]
 #![feature(doc_auto_cfg)]
-#![cfg_attr(feature = "embedded", feature(generic_associated_types))]
+#![cfg_attr(feature = "nightly", feature(generic_associated_types))]
 #![allow(dead_code)]
 
 #[cfg(feature = "alloc")]
@@ -15,13 +15,16 @@ mod processor;
 mod registry;
 mod stack;
 
+/// Core types for platforms that support allocators
 #[cfg(feature = "alloc")]
 pub mod desktop {
     pub use super::collection::*;
     pub use super::processor::{InitializationContext, Processor, TypeUsage};
 }
 
+/// Core types for `no_std` environments
 pub mod embedded {
+    #[cfg(feature = "nightly")]
     pub use super::processor::EmbeddedProcessor;
     pub use super::registry::FixedSizeRegistry;
     pub use super::stack::FixedSizeStack;

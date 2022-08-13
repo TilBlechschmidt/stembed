@@ -30,8 +30,12 @@ pub trait Stack {
     fn iter_next(&mut self) -> Option<(ShortID, &[u8])>;
 }
 
-/// Slice based stack implementation that stores entries with a 3-byte heder
-/// containing length (u16) and ShortID (u8)
+/// Slice based stack with a fixed capacity based on generic consts
+///
+/// Stores values alongside a three byte header containing the value length and type code.
+/// Values will be appended to the slice when pushed and removed when popped. The data
+/// may still be present until a new value is pushed that overwrites the old one.
+/// Note that headers are stored *after* values to simplify reverse iteration.
 pub struct FixedSizeStack<const CAPACITY: usize> {
     data: [u8; CAPACITY],
     usage: usize,
@@ -52,6 +56,10 @@ impl<const CAPACITY: usize> FixedSizeStack<CAPACITY> {
         }
     }
 
+    /// Number of currently free bytes, includes both data and internal overhead.
+    ///
+    /// When calculating the approximate number of values you can still fit onto the stack you should take
+    /// both their size *and* number into account since each pushed value is associated with an [`OVERHEAD`](Self::OVERHEAD)!
     pub fn free(&self) -> usize {
         self.data.len() - self.usage
     }

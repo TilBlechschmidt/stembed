@@ -30,6 +30,10 @@ pub trait Registry {
     }
 }
 
+/// Slice based registry with a fixed capacity based on generic consts
+///
+/// Allocates a number of `Option` based slots on the stack which
+/// can be filled & freed dynamically using the provided functions.
 pub struct FixedSizeRegistry<const CAPACITY: usize>([Option<Identifier>; CAPACITY]);
 
 impl<const CAPACITY: usize> FixedSizeRegistry<CAPACITY> {
