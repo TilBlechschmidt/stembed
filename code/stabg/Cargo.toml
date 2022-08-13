@@ -1,0 +1,20 @@
+[package]
+name = "stabg"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# TODO Remove both by default :D
+default = ["alloc", "embedded"]
+# Switches to allocation based stack & registries
+alloc = ["log"]
+# Enables asynchronous traits & static macros for embedded use
+embedded = []
+
+[dependencies]
+# serde = { version = "1.0.*", default-features = false }
+# postcard = "1.0.0"
+log = { version = "0.4.17", optional = true }
+
+[dev-dependencies]
+env_logger = "0.9"
