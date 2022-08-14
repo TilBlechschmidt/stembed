@@ -1,5 +1,5 @@
 #![no_std]
-#![feature(doc_auto_cfg)]
+#![feature(doc_auto_cfg, doc_cfg)]
 #![cfg_attr(feature = "nightly", feature(generic_associated_types))]
 #![allow(dead_code)]
 #![feature(async_closure, unboxed_closures)]
@@ -7,49 +7,21 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
-#[cfg(feature = "alloc")]
-mod collection;
 mod context;
 mod executor;
 mod identifier;
 mod macros;
-mod processor;
+mod queue;
 mod registry;
 mod stack;
 
-/// Core types for platforms that support allocators
-#[cfg(feature = "alloc")]
-pub mod desktop {
-    pub use super::collection::*;
-    pub use super::processor::{InitializationContext, Processor, TypeUsage};
-}
+pub mod processor;
 
-/// Core types for `no_std` environments
-pub mod embedded {
-    #[cfg(feature = "nightly")]
-    pub use super::processor::EmbeddedProcessor;
-    pub use super::registry::FixedSizeRegistry;
-    pub use super::stack::FixedSizeStack;
-}
-
-/// Collection of error types returned by this crate
-///
-/// Most of them are either related to out-of-memory conditions or caused by the
-/// user-provided processor.
-pub mod error {
-    pub use super::context::ExecutionContextError;
-    pub use super::processor::ExecutionError;
-    #[cfg(feature = "alloc")]
-    pub use super::processor::InitializationError;
-    pub use super::registry::RegistryError;
-    pub use super::stack::StackError;
-}
-
-pub use context::{ExecutionBranch, ExecutionContext};
+pub use context::*;
 pub use executor::Executor;
 pub use identifier::*;
-pub use registry::Registry;
-pub use stack::Stack;
+pub use queue::*;
+pub use stack::*;
 
 /// Automatically implements the [`Identifiable`](self::Identifiable) trait.
 ///

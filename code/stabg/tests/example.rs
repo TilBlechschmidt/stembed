@@ -1,7 +1,5 @@
 use stabg::{
-    desktop::{TypeUsage::*, *},
-    embedded::*,
-    error::*,
+    processor::{TypeUsage::*, *},
     *,
 };
 
@@ -22,24 +20,24 @@ fn full_stack_example() {
 
     // Build the data storage structures
     let mut stack = FixedSizeStack::<256>::new();
-    let mut registry = FixedSizeRegistry::<16>::default();
+    let mut executor = Executor::new(&mut stack);
 
     // Build an execution stack
-    let mut processors = ProcessorCollection::new(&mut registry);
-    processors
-        .push(TestProcessor2)
-        .unwrap()
-        .push(TestProcessor1)
-        .unwrap();
+    let mut queue = DynamicExecutionQueue::new();
+
+    // Schedule some processors
     // Note: They are specified in reverse order, but due to their input/output dependency
     //          the ::build() command reorders them so they work properly!
-    let mut execution_queue = processors.build();
+    queue
+        .schedule(TestProcessor2)
+        .unwrap()
+        .schedule(TestProcessor1)
+        .unwrap()
+        .optimize();
 
-    // Construct an executor, give it the necessary things, and run it all :)
-    let mut executor = Executor::new(&mut stack, &mut registry);
-
+    // Run it in an "infinite" loop :)
     loop {
-        executor.execute_sync(&mut execution_queue).unwrap();
+        executor.execute_sync(&mut queue).unwrap();
         break; // this wouldn't be there in a real scenario
     }
 }

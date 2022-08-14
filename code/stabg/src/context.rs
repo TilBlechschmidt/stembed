@@ -1,19 +1,8 @@
 use crate::{
-    registry::Registry,
+    registry::{Registry, ID_PROC_MARK, ID_VALUE_SET},
     stack::{self, Stack},
-    Identifiable, Identifier, ShortID,
+    Identifier, ShortID,
 };
-
-pub(crate) struct ValueSet(ShortID);
-pub(crate) struct ProcessorBoundary(ShortID);
-
-impl Identifiable for ValueSet {
-    const IDENTIFIER: Identifier = "stabg.intrinsic.valueSet";
-}
-
-impl Identifiable for ProcessorBoundary {
-    const IDENTIFIER: Identifier = "stabg.intrinsic.processorBoundary";
-}
 
 /// Errors caused by using the [`ExecutionContext`](ExecutionContext)'s API
 #[derive(Debug)]
@@ -41,16 +30,6 @@ pub struct ExecutionContext<'s, 'r> {
 
 impl<'s, 'r> ExecutionContext<'s, 'r> {
     pub fn new(stack: &'s mut dyn Stack, processor: ShortID, registry: &'r dyn Registry) -> Self {
-        debug_assert!(
-            registry.contains(ValueSet::IDENTIFIER),
-            "ValueSet type is not registered"
-        );
-
-        debug_assert!(
-            registry.contains(ProcessorBoundary::IDENTIFIER),
-            "ProcessorBoundary type is not registered"
-        );
-
         Self {
             stack,
             processor,
@@ -60,12 +39,17 @@ impl<'s, 'r> ExecutionContext<'s, 'r> {
 
     /// Fetches the latest value with the given type from the [`Stack`](Stack)
     pub fn get(&self, id: Identifier) -> Result<&[u8], ExecutionContextError> {
+        let code = self
+            .registry
+            .lookup(id)
+            .ok_or(ExecutionContextError::UnknownType)?;
+
+        if code == ID_VALUE_SET || code == ID_PROC_MARK {
+            panic!("Registry returned reserved code");
+        }
+
         self.stack
-            .get(
-                self.registry
-                    .lookup(id)
-                    .ok_or(ExecutionContextError::UnknownType)?,
-            )
+            .get(code)
             .ok_or(ExecutionContextError::ValueNotFound)
     }
 
@@ -75,13 +59,17 @@ impl<'s, 'r> ExecutionContext<'s, 'r> {
         id: Identifier,
         data: &[u8],
     ) -> Result<&mut Self, ExecutionContextError> {
+        let code = self
+            .registry
+            .lookup(id)
+            .ok_or(ExecutionContextError::UnknownType)?;
+
+        if code == ID_VALUE_SET || code == ID_PROC_MARK {
+            panic!("Registry returned reserved code");
+        }
+
         self.stack
-            .push(
-                self.registry
-                    .lookup(id)
-                    .ok_or(ExecutionContextError::UnknownType)?,
-                data,
-            )
+            .push(code, data)
             .map(|_| self)
             .map_err(ExecutionContextError::StackError)
     }
@@ -102,9 +90,8 @@ impl<'s, 'r> Drop for ExecutionContext<'s, 'r> {
     /// the processor for which this context was created has finished executing and will no
     /// longer push additional values.
     fn drop(&mut self) {
-        let code = self.registry.lookup(ProcessorBoundary::IDENTIFIER).unwrap();
         self.stack
-            .push(code, &self.processor.to_be_bytes())
+            .push(ID_PROC_MARK, &self.processor.to_be_bytes())
             .expect("failed to push ProcessorBoundary marker");
     }
 }
@@ -135,8 +122,8 @@ impl<'s, 'r> ExecutionBranch<'s, 'r> {
 impl<'s, 'r> Drop for ExecutionBranch<'s, 'r> {
     fn drop(&mut self) {
         self.context
-            // TODO Use ValueSet struct!
-            .push(ValueSet::IDENTIFIER, &self.value_count.to_be_bytes())
+            .stack
+            .push(ID_VALUE_SET, &self.value_count.to_be_bytes())
             .expect("failed to push ValueSet marker");
     }
 }

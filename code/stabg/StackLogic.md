@@ -1,3 +1,21 @@
+# Stuff
+1. Make Collection into ExecutionQueue ✅
+2. ExecutionQueue is re-usable, no building it into the executable thing ✅
+3. It has an `optimizeExecutionOrder` function ✅ that spits out diagnostics 🔶
+4. Make an EmbeddedExecutionQueue
+5. Implemented via derive macro
+6. Takes all fields, which have to be of type EmbeddedProcessor and generates code to run them in sequence
+7. Derive macro can also generate code to statically check the execution order
+8. Move the registry into the ExecutionQueue responsibility
+9. It allocates it, it decides what impl to use
+10. Executor just gets a Stack and the queue
+11. Unloading plugins can be done through the ExecutionQueue API
+12. It then also removes any obsolete types from the internal type registry
+13. On embedded, the registry is statically built in the derive macro
+	- If this is possible, if not, at least use it to determine the registry size!
+14. It is a fixed-size slice built by concatenating all processor input/output slices, first result wins
+15. Optionally count duplicates to get more efficient integer space usage (-> pure runtime thing when looking up types)
+
 # High-level TODOs
 - Add remaining docs
     - `Executor`

@@ -1,6 +1,7 @@
+//! Traits & types for user-provided logic components
+
 use crate::{
     context::{ExecutionContext, ExecutionContextError},
-    identifier::ShortID,
     registry::Registry,
     Identifiable, Identifier,
 };
@@ -31,7 +32,7 @@ impl From<ExecutionContextError> for ExecutionError {
     }
 }
 
-/// User-provided logic component — `The Heart Of The System` ❤️
+/// User-provided logic component, asynchronous counterpart to the regular processor
 ///
 /// This is the asynchronous and static equivalent to the regular [`Processor`](self::alloc::Processor),
 /// optimized for use on embedded platforms that do not support `alloc` or `std`.
@@ -65,7 +66,7 @@ impl From<ExecutionContextError> for ExecutionError {
 /// #![feature(type_alias_impl_trait)]
 /// #![feature(generic_associated_types)]
 /// #
-/// # use stabg::{error::ExecutionError, ExecutionContext, embedded::EmbeddedProcessor, Identifier, Identifiable};
+/// # use stabg::{processor::{ExecutionError, EmbeddedProcessor}, ExecutionContext, Identifier, Identifiable};
 /// # use core::future::Future;
 ///
 /// #[derive(Identifiable)]
@@ -190,8 +191,8 @@ mod alloc {
     /// what values you depend on and can provide. It then derives an execution order from this information!
     pub struct InitializationContext<'r> {
         type_registry: &'r mut dyn Registry,
-        pub(crate) input: Vec<ShortID>,
-        pub(crate) output: Vec<ShortID>,
+        pub(crate) input: Vec<Identifier>,
+        pub(crate) output: Vec<Identifier>,
     }
 
     impl<'r> InitializationContext<'r> {
@@ -218,7 +219,7 @@ mod alloc {
             usage: TypeUsage,
         ) -> Result<&mut Self, InitializationError> {
             match self.type_registry.register(id) {
-                Ok(id) => {
+                Ok(_) => {
                     match usage {
                         TypeUsage::Input => self.input.push(id),
                         TypeUsage::Output => self.output.push(id),

@@ -1,9 +1,10 @@
+use super::ExecutionQueue;
 use crate::{
     context::ExecutionContext,
-    desktop::Processor,
     identifier::ShortID,
+    processor::Processor,
     processor::{ExecutionError, InitializationContext, InitializationError},
-    registry::Registry,
+    registry::{DynamicRegistry, Registry},
     stack::Stack,
     Identifier,
 };
@@ -15,29 +16,26 @@ type OwnedProcessor = Box<dyn Processor>;
 
 struct LoadedProcessor {
     processor: OwnedProcessor,
-    input: Vec<ShortID>,
-    output: Vec<ShortID>,
+    input: Vec<Identifier>,
+    output: Vec<Identifier>,
 }
 
-/// Dynamically collects processors for execution
-///
-/// Will reorder processors as required by their input / output dependencies while trying to maintain the original order.
-/// Additionally, warnings will be emitted if dependencies can not be satisfied or if circular dependencies exist.
-/// This information will be exposed to callers of the [`build`](ProcessorCollection::build) function in the future.
-pub struct ProcessorCollection<'r> {
+/// Self-organizing [`ExecutionQueue`](ExecutionQueue) on the heap
+#[doc(cfg(feature = "alloc"))]
+pub struct DynamicExecutionQueue {
     processors: Vec<LoadedProcessor>,
-    type_registry: &'r mut dyn Registry,
+    registry: DynamicRegistry,
     abort_on_error: bool,
 }
 
-impl<'r> ProcessorCollection<'r> {
+impl DynamicExecutionQueue {
     // TODO Implement extend or generally anything that allows us to go over iterators :)
 
-    /// Creates an empty collection which will register types required by processors that are added with [`push`](Self::push) into the provided registry
-    pub fn new(type_registry: &'r mut dyn Registry) -> Self {
+    /// Creates an empty queue
+    pub fn new() -> Self {
         Self {
             processors: Vec::new(),
-            type_registry,
+            registry: DynamicRegistry::new(),
             abort_on_error: false,
         }
     }
@@ -49,18 +47,45 @@ impl<'r> ProcessorCollection<'r> {
     }
 
     /// Adds the given processor to the collection, calling its [`load`](Processor::load) method to determine input & output dependencies
-    pub fn push<P: Processor + 'static>(
+    pub fn schedule<P: Processor + 'static>(
         &mut self,
         processor: P,
     ) -> Result<&mut Self, InitializationError> {
-        self.push_boxed(Box::new(processor))
+        self.schedule_boxed(Box::new(processor))
     }
 
-    fn push_boxed(
+    // TODO Output a list of diagnostics for further processing / display / testing :)
+    /// Reorders the processors as required, checks for unmet and cyclic dependencies, emits warnings for unused outputs.
+    pub fn optimize(&mut self) {
+        self.reorder_processors();
+        self.lint_unused_outputs();
+    }
+
+    /// Removes a processor from scheduling and calls its [`unload`](Processor::unload) method.
+    ///
+    /// After unloading a processor, the execution order may be suboptimal and calling [`optimize`](Self::optimize) is recommended.
+    pub fn unload(&mut self, identifier: Identifier) {
+        // Remove the processor, unloading is called by the `Drop` impl
+        self.processors
+            .retain(|processor| processor.identifier() != identifier);
+
+        // Re-register all types to get rid of potentially unused types
+        self.registry = DynamicRegistry::new();
+
+        for processor in self.processors.iter() {
+            for t in processor.input.iter().chain(processor.output.iter()) {
+                self.registry
+                    .register(t)
+                    .expect("failed to re-register previously registered type");
+            }
+        }
+    }
+
+    fn schedule_boxed(
         &mut self,
         mut processor: OwnedProcessor,
     ) -> Result<&mut Self, InitializationError> {
-        let mut ctx = InitializationContext::new(self.type_registry);
+        let mut ctx = InitializationContext::new(&mut self.registry);
         processor.load(&mut ctx)?;
 
         self.processors.push(LoadedProcessor::new(processor, ctx));
@@ -68,8 +93,8 @@ impl<'r> ProcessorCollection<'r> {
         Ok(self)
     }
 
-    fn optimize_execution_order(&mut self) -> bool {
-        let mut available_types = Vec::<ShortID>::new();
+    fn reorder_processors(&mut self) {
+        let mut available_types = Vec::<Identifier>::new();
         let mut processor_stack = Vec::with_capacity(self.processors.len());
         let mut success = true;
 
@@ -97,7 +122,7 @@ impl<'r> ProcessorCollection<'r> {
                     .input
                     .iter()
                     .filter(|i| !available_types.contains(i))
-                    .filter_map(|i| self.type_registry.reverse_lookup(*i))
+                    .map(|i| *i)
                     .collect::<Vec<_>>()
                     .join(", ");
 
@@ -114,12 +139,10 @@ impl<'r> ProcessorCollection<'r> {
 
         // Move the processors back into the original collection
         self.processors.extend(processor_stack.into_iter());
-
-        success
     }
 
     fn lint_unused_outputs(&self) {
-        let mut type_stack = Vec::<(Identifier, ShortID, bool)>::new();
+        let mut type_stack = Vec::<(Identifier, Identifier, bool)>::new();
 
         for processor in self.processors.iter() {
             let i = processor.identifier();
@@ -134,63 +157,53 @@ impl<'r> ProcessorCollection<'r> {
             type_stack.extend(processor.output.iter().map(|t| (i, *t, false)));
         }
 
-        for (processor_ident, t, _) in type_stack.iter().filter(|(_, _, used)| !used) {
+        for (processor_ident, type_ident, _) in type_stack.iter().filter(|(_, _, used)| !used) {
             warn!(
                 "Output of type '{}' from processor '{}' is unused",
-                self.type_registry.reverse_lookup(*t).unwrap(),
-                processor_ident
+                type_ident, processor_ident
             );
         }
     }
+}
 
-    // TODO Output a list of diagnostics for further processing / display / testing :)
-    /// Reorders the processors as required, checks for unmet and cyclic dependencies, emits warnings for
-    /// unused outputs, and finally creates a function which can be handed to the [`Executor::execute_sync`](super::Executor::execute_sync)
-    /// function for execution.
-    pub fn build(
-        mut self,
-    ) -> impl FnMut(Option<ShortID>, &mut dyn Stack, &dyn Registry) -> Result<(), ExecutionError>
-    {
-        if !self.optimize_execution_order() {
-            error!("Failed to optimize execution order, some processors may fail to execute due to missing inputs");
-        }
-
-        self.lint_unused_outputs();
-
-        move |start_id, stack, registry| {
-            // 1. Annotate processors with increasing IDs
-            // 2. Skip anything before the start_id if applicable
-            let pending_processors = self
-                .processors
-                .iter_mut()
-                .enumerate()
-                .map(|(i, p)| (i as u32, p))
-                .skip_while(|(i, _)| {
-                    if let Some(start) = start_id {
-                        start == *i
-                    } else {
-                        false
-                    }
-                });
-
-            // Go through all processors
-            for (id, processor) in pending_processors {
-                let context = ExecutionContext::new(stack, id, registry);
-                let result = processor.process(context);
-
-                if self.abort_on_error {
-                    result?;
-                } else if let Err(e) = result {
-                    error!(
-                        "Failed to execute processor {}: {:?}",
-                        processor.identifier(),
-                        e
-                    );
+impl ExecutionQueue for DynamicExecutionQueue {
+    fn run(
+        &mut self,
+        start_id: Option<ShortID>,
+        stack: &mut dyn Stack,
+    ) -> Result<(), ExecutionError> {
+        // 1. Annotate processors with increasing IDs
+        // 2. Skip anything before the start_id if applicable
+        let pending_processors = self
+            .processors
+            .iter_mut()
+            .enumerate()
+            .map(|(i, p)| (i as u32, p))
+            .skip_while(|(i, _)| {
+                if let Some(start) = start_id {
+                    start == *i
+                } else {
+                    false
                 }
-            }
+            });
 
-            Ok(())
+        // Go through all processors
+        for (id, processor) in pending_processors {
+            let context = ExecutionContext::new(stack, id, &mut self.registry);
+            let result = processor.process(context);
+
+            if self.abort_on_error {
+                result?;
+            } else if let Err(e) = result {
+                error!(
+                    "Failed to execute processor {}: {:?}",
+                    processor.identifier(),
+                    e
+                );
+            }
         }
+
+        Ok(())
     }
 }
 
