@@ -3,8 +3,10 @@
     - `Executor`
     - High-level explanation of core concepts
 - Build embedded execution queue ;)
+	- TODO: Make ExecutionContext::new private again
 - Build serialization/deserialization API for embedded/desktop
     - Behind `serde` feature flag, make the algorithm itself exchangeable!
+    - "Serialize" on embedded by either transmuting into byte slices or just straight up storing raw pointer+len and "forgetting" the memory temporarily in regards to the borrow checker
 - Implement alloc based stack & registry
 - Expose collection diagnostics on desktop
 - Build supporting crate for inputs (stabg-input?)
@@ -21,6 +23,7 @@
             - On first load, it asks the user — subsequent loads use cached permissions
         - Communication via stdin/stdout
         - Client-side SDK
+- Reorganise files into modules according to mod structure?
 
 # Proposed features & ideas
 - Include $crate name in identifiers so you "cant" use other plugins stuff without importing them as a lib
@@ -33,7 +36,6 @@
         - Problematic because it breaks the paradigm
         - Plugins should instead be of a streaming nature
         - Instead, provide cycle functions like "pre_cycle_start" so that a plugin can know when one batch of execs has finished
-- "Serialize" on embedded by either transmuting into byte slices or just straight up storing raw pointer+len and "forgetting" the memory temporarily in regards to the borrow checker
 
 # Type implementations & explanations
 

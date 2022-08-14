@@ -40,11 +40,7 @@ pub struct ExecutionContext<'s, 'r> {
 }
 
 impl<'s, 'r> ExecutionContext<'s, 'r> {
-    pub(crate) fn new(
-        stack: &'s mut dyn Stack,
-        processor: ShortID,
-        registry: &'r dyn Registry,
-    ) -> Self {
+    pub fn new(stack: &'s mut dyn Stack, processor: ShortID, registry: &'r dyn Registry) -> Self {
         debug_assert!(
             registry.contains(ValueSet::IDENTIFIER),
             "ValueSet type is not registered"

@@ -2,6 +2,7 @@
 #![feature(doc_auto_cfg)]
 #![cfg_attr(feature = "nightly", feature(generic_associated_types))]
 #![allow(dead_code)]
+#![feature(async_closure, unboxed_closures)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -11,6 +12,7 @@ mod collection;
 mod context;
 mod executor;
 mod identifier;
+mod macros;
 mod processor;
 mod registry;
 mod stack;

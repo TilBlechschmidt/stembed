@@ -21,3 +21,4 @@ stabg-derive = { path = "./stabg-derive", optional = true }
 
 [dev-dependencies]
 env_logger = "0.9"
+futures = "0.3.23"
