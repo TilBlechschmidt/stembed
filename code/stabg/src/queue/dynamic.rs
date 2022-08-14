@@ -4,7 +4,7 @@ use crate::{
     identifier::ShortID,
     processor::Processor,
     processor::{ExecutionError, InitializationContext, InitializationError},
-    registry::{DynamicRegistry, Registry},
+    registry::DynamicRegistry,
     stack::Stack,
     Identifier,
 };
@@ -71,22 +71,24 @@ impl DynamicExecutionQueue {
 
         // Re-register all types to get rid of potentially unused types
         self.registry = DynamicRegistry::new();
-
-        for processor in self.processors.iter() {
-            for t in processor.input.iter().chain(processor.output.iter()) {
-                self.registry
-                    .register(t)
-                    .expect("failed to re-register previously registered type");
-            }
-        }
+        self.processors
+            .iter()
+            .flat_map(|p| p.input.iter().chain(p.output.iter()))
+            .for_each(|t| {
+                self.registry.register(t);
+            });
     }
 
     fn schedule_boxed(
         &mut self,
         mut processor: OwnedProcessor,
     ) -> Result<&mut Self, InitializationError> {
-        let mut ctx = InitializationContext::new(&mut self.registry);
+        let mut ctx = InitializationContext::new();
         processor.load(&mut ctx)?;
+
+        ctx.input.iter().chain(ctx.output.iter()).for_each(|t| {
+            self.registry.register(t);
+        });
 
         self.processors.push(LoadedProcessor::new(processor, ctx));
 

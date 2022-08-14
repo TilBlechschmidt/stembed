@@ -4,11 +4,11 @@ use stabg::{
 };
 
 #[derive(Identifiable)]
-#[identifiable(name = "test.type", version = "1")]
+#[identifier(name = "test.type", version = "1")]
 struct TestType1(u8);
 
 #[derive(Identifiable)]
-#[identifiable(name = "test.type", version = "2")]
+#[identifier(name = "test.type", version = "2")]
 struct TestType2(u8);
 
 struct TestProcessor1;
@@ -51,8 +51,8 @@ impl Processor for TestProcessor1 {
 
     fn load(&mut self, context: &mut InitializationContext) -> Result<(), InitializationError> {
         context
-            .register::<TestType1>(Output)?
-            .register::<TestType2>(Output)?;
+            .register::<TestType1>(Output)
+            .register::<TestType2>(Output);
 
         Ok(())
     }
@@ -77,8 +77,8 @@ impl Processor for TestProcessor2 {
 
     fn load(&mut self, context: &mut InitializationContext) -> Result<(), InitializationError> {
         context
-            .register::<TestType1>(Input)?
-            .register::<TestType2>(Input)?;
+            .register::<TestType1>(Input)
+            .register::<TestType2>(Input);
 
         Ok(())
     }

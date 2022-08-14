@@ -29,6 +29,7 @@ pub struct ExecutionContext<'s, 'r> {
 }
 
 impl<'s, 'r> ExecutionContext<'s, 'r> {
+    #[doc(hidden)]
     pub fn new(stack: &'s mut dyn Stack, processor: ShortID, registry: &'r dyn Registry) -> Self {
         Self {
             stack,

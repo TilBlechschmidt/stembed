@@ -2,7 +2,6 @@
 
 use crate::{
     context::{ExecutionContext, ExecutionContextError},
-    registry::Registry,
     Identifiable, Identifier,
 };
 use core::future::Future;
@@ -66,11 +65,9 @@ impl From<ExecutionContextError> for ExecutionError {
 /// #![feature(type_alias_impl_trait)]
 /// #![feature(generic_associated_types)]
 /// #
-/// # use stabg::{processor::{ExecutionError, EmbeddedProcessor}, ExecutionContext, Identifier, Identifiable};
+/// # use stabg::{processor::{ExecutionError, EmbeddedProcessor}, ExecutionContext, Identifier};
 /// # use core::future::Future;
 ///
-/// #[derive(Identifiable)]
-/// #[identifiable(name = "com.example.processor")]
 /// struct ExampleProcessor;
 ///
 /// impl EmbeddedProcessor for ExampleProcessor {
@@ -94,7 +91,7 @@ impl From<ExecutionContextError> for ExecutionError {
 /// }
 /// ```
 #[cfg(feature = "nightly")]
-pub trait EmbeddedProcessor: Identifiable {
+pub trait EmbeddedProcessor {
     /// List of types that will be retrieved from the context during execution
     const TYPES_INPUT: &'static [Identifier];
 
@@ -131,8 +128,6 @@ pub use self::alloc::*;
 
 #[cfg(feature = "alloc")]
 mod alloc {
-    use crate::registry::RegistryError;
-
     use super::*;
     use ::alloc::vec::Vec;
 
@@ -162,8 +157,6 @@ mod alloc {
     /// Errors caused while initializing a dynamic [`Processor`](Processor)
     #[derive(Debug)]
     pub enum InitializationError {
-        /// The type could not be registered due to a transitive error in the underlying [`Registry`](Registry)
-        TypeRegistrationFailed(RegistryError),
         /// Unknown internal error from within the plugin, unrelated to the initialization context.
         InternalError(::alloc::string::String),
     }
@@ -189,49 +182,36 @@ mod alloc {
     ///
     /// This registration logic provides the information to the [`ProcessorCollection`](crate::desktop::ProcessorCollection)
     /// what values you depend on and can provide. It then derives an execution order from this information!
-    pub struct InitializationContext<'r> {
-        type_registry: &'r mut dyn Registry,
+    pub struct InitializationContext {
         pub(crate) input: Vec<Identifier>,
         pub(crate) output: Vec<Identifier>,
     }
 
-    impl<'r> InitializationContext<'r> {
-        pub(crate) fn new(type_registry: &'r mut dyn Registry) -> Self {
+    impl InitializationContext {
+        pub(crate) fn new() -> Self {
             Self {
-                type_registry,
                 input: Vec::new(),
                 output: Vec::new(),
             }
         }
 
         /// Informs the runtime that a given type will be used during execution and for what purpose
-        pub fn register<T: Identifiable>(
-            &mut self,
-            usage: TypeUsage,
-        ) -> Result<&mut Self, InitializationError> {
+        pub fn register<T: Identifiable>(&mut self, usage: TypeUsage) -> &mut Self {
             self.register_raw(T::IDENTIFIER, usage)
         }
 
         /// Informs the runtime that a type with the given identifier will be used during execution and for what purpose
-        pub fn register_raw(
-            &mut self,
-            id: Identifier,
-            usage: TypeUsage,
-        ) -> Result<&mut Self, InitializationError> {
-            match self.type_registry.register(id) {
-                Ok(_) => {
-                    match usage {
-                        TypeUsage::Input => self.input.push(id),
-                        TypeUsage::Output => self.output.push(id),
-                        TypeUsage::InOut => {
-                            self.input.push(id);
-                            self.output.push(id);
-                        }
-                    }
-                    Ok(self)
+        pub fn register_raw(&mut self, id: Identifier, usage: TypeUsage) -> &mut Self {
+            match usage {
+                TypeUsage::Input => self.input.push(id),
+                TypeUsage::Output => self.output.push(id),
+                TypeUsage::InOut => {
+                    self.input.push(id);
+                    self.output.push(id);
                 }
-                Err(e) => Err(InitializationError::TypeRegistrationFailed(e)),
             }
+
+            self
         }
     }
 }

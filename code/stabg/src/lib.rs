@@ -23,6 +23,9 @@ pub use identifier::*;
 pub use queue::*;
 pub use stack::*;
 
+#[doc(hidden)]
+pub use registry::IteratorRegistry;
+
 /// Automatically implements the [`Identifiable`](self::Identifiable) trait.
 ///
 /// Nothing really special, but makes the code a little more legible!
@@ -35,11 +38,11 @@ pub use stack::*;
 /// use stabg::{Identifiable, Identifier};
 ///
 /// #[derive(Identifiable)]
-/// #[identifiable(name = "test.type-1")]
+/// #[identifier(name = "test.type-1")]
 /// struct TestType1(u8);
 ///
 /// #[derive(Identifiable)]
-/// #[identifiable(name = "test.type", version = "2")]
+/// #[identifier(name = "test.type", version = "2")]
 /// struct TestType2(u8);
 ///
 ///# fn main() {
@@ -49,3 +52,6 @@ pub use stack::*;
 /// ```
 #[cfg(feature = "derive")]
 pub use stabg_derive::Identifiable;
+
+#[cfg(feature = "derive")]
+pub use stabg_derive::AsyncExecutionQueue;

@@ -1,31 +1,29 @@
-# Stuff
-1. Make Collection into ExecutionQueue ✅
-2. ExecutionQueue is re-usable, no building it into the executable thing ✅
-3. It has an `optimizeExecutionOrder` function ✅ that spits out diagnostics 🔶
-4. Make an EmbeddedExecutionQueue
-5. Implemented via derive macro
-6. Takes all fields, which have to be of type EmbeddedProcessor and generates code to run them in sequence
-7. Derive macro can also generate code to statically check the execution order
-8. Move the registry into the ExecutionQueue responsibility
-9. It allocates it, it decides what impl to use
-10. Executor just gets a Stack and the queue
-11. Unloading plugins can be done through the ExecutionQueue API
-12. It then also removes any obsolete types from the internal type registry
-13. On embedded, the registry is statically built in the derive macro
-	- If this is possible, if not, at least use it to determine the registry size!
-14. It is a fixed-size slice built by concatenating all processor input/output slices, first result wins
-15. Optionally count duplicates to get more efficient integer space usage (-> pure runtime thing when looking up types)
+# Detailed TODOs
+- Add diags to `fn optimize`
+- Derive macro can also generate code to statically check the execution order
+- Make EmbeddedProcessor load/unload async
+- Add derive macro for EmbeddedProcessor
+	- Automatically infer stack usage based on item & byte count
+	- Add inputs/outputs based on optional attributes
+	- Figure out a way make calls to load/unload optional?
+	- Once async traits are supported, move the fn itself back outside the derive and just auto-add the stack size & inputs/outputs
+
+```
+#[derive(EmbeddedProcessor, Default)]
+#[inputs(TestType2)]                      // Optional
+#[outputs(TestType1, TestType2)]          // Optional
+#[stack_usage(items = 10, bytes = 32)]
+struct TestProcessor1;
+```
 
 # High-level TODOs
 - Add remaining docs
     - `Executor`
     - High-level explanation of core concepts
-- Build embedded execution queue ;)
-	- TODO: Make ExecutionContext::new private again
 - Build serialization/deserialization API for embedded/desktop
     - Behind `serde` feature flag, make the algorithm itself exchangeable!
     - "Serialize" on embedded by either transmuting into byte slices or just straight up storing raw pointer+len and "forgetting" the memory temporarily in regards to the borrow checker
-- Implement alloc based stack & registry
+- Implement alloc based stack
 - Expose collection diagnostics on desktop
 - Build supporting crate for inputs (stabg-input?)
     - `InputProcessor` for desktop
@@ -41,10 +39,8 @@
             - On first load, it asks the user — subsequent loads use cached permissions
         - Communication via stdin/stdout
         - Client-side SDK
-- Reorganise files into modules according to mod structure?
 
 # Proposed features & ideas
-- Include $crate name in identifiers so you "cant" use other plugins stuff without importing them as a lib
 - Classes of processor ordering diagnostics
     - Output XYZ will never be used
     - Will never be executed because inputs can't be available
@@ -140,7 +136,7 @@
     - Returns warnings if a processor will never get the values it wants or circular dependencies exist
 - Only on desktop, no array can be built from async traits as they are not object-safe
 
-## ExecutionQueue ✅ / AsyncExecutionQueue 🔶
+## ExecutionQueue ✅ / AsyncExecutionQueue ✅
 - Basically a `fn` which runs all processors
 	- Gets `&mut stack, &registry` and builds ExecutionContext instances internally for each processor
 - Can skip processors / start at a given processor based on its ID
