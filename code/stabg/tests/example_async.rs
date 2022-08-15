@@ -32,20 +32,16 @@ fn async_full_stack_example() {
     futures::executor::block_on(async move {
         let _ = env_logger::builder().is_test(true).try_init();
 
-        // Build the data structures
         let mut queue = EmbeddedExecutionQueue::default();
         let mut stack = FixedSizeStack::<{ EmbeddedExecutionQueue::STACK_USAGE }>::new();
         let mut executor = Executor::new(&mut stack);
 
-        // Run the whole thing :)
         loop {
             executor.execute_async(&mut queue).await.unwrap();
-            break; // this wouldn't be there in a real scenario
+            break;
         }
     });
 }
-
-// ————————————— Implementations of processors below —————————————
 
 impl TestProcessor1 {
     async fn load(&mut self) -> Result<(), &'static str> {

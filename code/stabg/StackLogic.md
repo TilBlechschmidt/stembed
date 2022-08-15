@@ -1,16 +1,15 @@
 # Detailed TODOs
-- Add diags output to `ExecutionQueue::optimize`
-- Have derive macro for queue generate const order-checking code
 - Reverse order of values in ValueSet (because otherwise its *really* unintuitive ...)
 
 # High-level TODOs
-- Add remaining docs
-    - `Executor`
-    - High-level explanation of core concepts in crate root
 - Build serialization/deserialization API for embedded/desktop
     - Behind `serde` feature flag, make the algorithm itself exchangeable!
     - "Serialize" on embedded by either transmuting into byte slices or just straight up storing raw pointer+len and "forgetting" the memory temporarily in regards to the borrow checker
 - Build stack debugging tools <3
+- Add remaining docs
+    - `Executor`
+    - `ExecutionQueue`
+    - High-level explanation of core concepts in crate root
 - Build supporting crate for inputs (stabg-input?)
     - `InputProcessor` for desktop
     - `make_input_processor` macro for embedded
@@ -27,7 +26,8 @@
         - Client-side SDK
 
 # Proposed features & ideas
-- Classes of processor ordering diagnostics
+- Have derive macro for queue generate const order-checking code
+- Output & improve processor re-ordering diagnostics
     - Output XYZ will never be used
     - Will never be executed because inputs can't be available
         - Analyse the dependency graph of all broken processors to detect transitive & circular dependencies
