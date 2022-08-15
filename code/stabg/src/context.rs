@@ -34,6 +34,30 @@ pub struct GenericExecutionContext<'s, 'r, S: Serializer + Copy> {
     serializer: S,
 }
 
+#[cfg(feature = "alloc")]
+impl<'s, 'r> GenericExecutionContext<'s, 'r, crate::serialization::JsonSerializer> {
+    /// Byte-oriented version of [`get`](Self::get) which allows direct fetches from storage without deserialization.
+    /// Can be used for passing values through FFI or process boundaries where generics are hard to accomplish.
+    /// Only implemented for safe, self-describing serialization formats.
+    pub fn get_raw(
+        &self,
+        id: Identifier,
+    ) -> Result<&[u8], ExecutionContextError<serde_json::Error>> {
+        self._get_raw(id)
+    }
+
+    /// Byte-oriented version of [`push`](Self::push) which allows direct storage from a byte stream without serialization.
+    /// Can be used for passing values through FFI or process boundaries where generics are hard to accomplish.
+    /// Only implemented for safe, self-describing serialization formats.
+    pub fn push_raw(
+        &mut self,
+        id: Identifier,
+        data: &[u8],
+    ) -> Result<(), ExecutionContextError<serde_json::Error>> {
+        self._push_raw(id, data)
+    }
+}
+
 impl<'s, 'r, S: Serializer + Copy> GenericExecutionContext<'s, 'r, S> {
     /// Maximum number of bytes pushed onto the stack per instance
     // Contains PROC_MARK + VALUE_SET with the corresponding overhead from the stack
@@ -54,27 +78,28 @@ impl<'s, 'r, S: Serializer + Copy> GenericExecutionContext<'s, 'r, S> {
         }
     }
 
+    /// Fetches the latest value with the given type from the [`Stack`](Stack)
     pub fn get<T: Identifiable + DeserializeOwned>(
         &self,
     ) -> Result<T, ExecutionContextError<S::Error>> {
         self.serializer
-            .deserialize(self.get_raw(T::IDENTIFIER)?)
+            .deserialize(self._get_raw(T::IDENTIFIER)?)
             .map_err(ExecutionContextError::SerializationError)
     }
 
+    /// Pushes a new value of the given type onto the [`Stack`](Stack)
     pub fn push<T: Identifiable + Serialize>(
         &mut self,
         value: T,
     ) -> Result<&mut Self, ExecutionContextError<S::Error>> {
         self.serializer
             .clone()
-            .serialize(&value, |buf| self.push_raw(T::IDENTIFIER, buf))
+            .serialize(&value, |buf| self._push_raw(T::IDENTIFIER, buf))
             .map(|_| self)
             .map_err(ExecutionContextError::SerializationError)
     }
 
-    /// Fetches the latest value with the given type from the [`Stack`](Stack)
-    fn get_raw(&self, id: Identifier) -> Result<&[u8], ExecutionContextError<S::Error>> {
+    fn _get_raw(&self, id: Identifier) -> Result<&[u8], ExecutionContextError<S::Error>> {
         let code = self
             .registry
             .lookup(id)
@@ -89,8 +114,7 @@ impl<'s, 'r, S: Serializer + Copy> GenericExecutionContext<'s, 'r, S> {
             .ok_or(ExecutionContextError::ValueNotFound)
     }
 
-    /// Pushes a new value of the given type onto the [`Stack`](Stack)
-    fn push_raw(
+    fn _push_raw(
         &mut self,
         id: Identifier,
         data: &[u8],
@@ -147,12 +171,28 @@ impl<'s, 'r, S: Serializer + Copy> GenericExecutionBranch<'s, 'r, S> {
         }
     }
 
+    /// Pushes a new value of the given type onto the [`Stack`](Stack)
+    pub fn push<T: Identifiable + Serialize>(
+        &mut self,
+        value: T,
+    ) -> Result<&mut Self, ExecutionContextError<S::Error>> {
+        self.context.push(value)?;
+        self.value_count += 1;
+        Ok(self)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'s, 'r> GenericExecutionBranch<'s, 'r, crate::serialization::JsonSerializer> {
+    /// Byte-oriented version of [`push`](Self::push) which allows direct storage from a byte stream without serialization.
+    /// Can be used for passing values through FFI or process boundaries where generics are hard to accomplish.
+    /// Only implemented for safe, self-describing serialization formats.
     pub fn push_raw(
         &mut self,
         id: Identifier,
         data: &[u8],
-    ) -> Result<(), ExecutionContextError<S::Error>> {
-        self.context.push_raw(id, data)?;
+    ) -> Result<(), ExecutionContextError<serde_json::Error>> {
+        self.context._push_raw(id, data)?;
         self.value_count += 1;
         Ok(())
     }
