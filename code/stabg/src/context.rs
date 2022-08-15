@@ -43,7 +43,7 @@ impl<'s, 'r> ExecutionContext<'s, 'r> {
     }
 
     /// Fetches the latest value with the given type from the [`Stack`](Stack)
-    pub fn get(&self, id: Identifier) -> Result<&[u8], ExecutionContextError> {
+    pub fn get_raw(&self, id: Identifier) -> Result<&[u8], ExecutionContextError> {
         let code = self
             .registry
             .lookup(id)
@@ -59,7 +59,7 @@ impl<'s, 'r> ExecutionContext<'s, 'r> {
     }
 
     /// Pushes a new value of the given type onto the [`Stack`](Stack)
-    pub fn push(
+    pub fn push_raw(
         &mut self,
         id: Identifier,
         data: &[u8],
@@ -117,8 +117,8 @@ impl<'s, 'r> ExecutionBranch<'s, 'r> {
         }
     }
 
-    pub fn push(&mut self, id: Identifier, data: &[u8]) -> Result<(), ExecutionContextError> {
-        self.context.push(id, data)?;
+    pub fn push_raw(&mut self, id: Identifier, data: &[u8]) -> Result<(), ExecutionContextError> {
+        self.context.push_raw(id, data)?;
         self.value_count += 1;
         Ok(())
     }

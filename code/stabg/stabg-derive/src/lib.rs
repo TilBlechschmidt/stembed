@@ -16,8 +16,6 @@ struct IdentifiableOpts {
 struct StackUsageOpts {
     #[darling(default)]
     items: usize,
-    #[darling(default)]
-    bytes: usize,
 }
 
 #[derive(FromDeriveInput, Default)]
@@ -61,23 +59,24 @@ pub fn derive_embedded_processor(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let mut errors = Error::accumulator();
 
-    let (items, bytes) = match StackUsageOpts::from_derive_input(&input) {
-        Ok(StackUsageOpts { items, bytes }) => {
-            if bytes > 0 && items == 0 {
-                errors.push(Error::custom(
-                    "Returning `bytes` requires the `items` field to be present",
-                ));
-            }
-
-            (items, bytes)
-        }
+    let items = match StackUsageOpts::from_derive_input(&input) {
+        Ok(StackUsageOpts { items }) => items,
         Err(err) => {
-            return err.write_errors().into();
+            errors.push(err);
+            0
         }
     };
 
-    let TypeUsageOpts { inputs, outputs } = TypeUsageOpts::from_derive_input(&input)
-        .expect("Missing or invalid `type_usage` attribute");
+    let (inputs, outputs) = match TypeUsageOpts::from_derive_input(&input) {
+        Ok(TypeUsageOpts { inputs, outputs }) => (inputs, outputs),
+        Err(err) => {
+            errors.push(err);
+            (
+                PathList::new(Vec::<syn::Path>::new()),
+                PathList::new(Vec::<syn::Path>::new()),
+            )
+        }
+    };
 
     let DeriveInput { ident, .. } = input;
 
@@ -85,7 +84,7 @@ pub fn derive_embedded_processor(input: TokenStream) -> TokenStream {
         errors.push(Error::custom(
             "Output types defined but `stack_usage` is empty or not present",
         ));
-    } else if outputs.is_empty() && (items + bytes) > 0 {
+    } else if outputs.is_empty() && items > 0 {
         errors.push(Error::custom(
             "No output types defined but `stack_usage` is larger than `0`",
         ));
@@ -93,9 +92,11 @@ pub fn derive_embedded_processor(input: TokenStream) -> TokenStream {
 
     let output = quote! {
         impl ::stabg::processor::EmbeddedProcessor for #ident {
-            const TYPES_INPUT: &'static [::stabg::Identifier] = &[#(#inputs::IDENTIFIER, )*];
-            const TYPES_OUTPUT: &'static [::stabg::Identifier] = &[#(#outputs::IDENTIFIER, )*];
-            const STACK_USAGE: usize = #bytes + #items * ::stabg::FixedSizeStack::<0>::OVERHEAD;
+            const TYPES_INPUT: &'static [::stabg::Identifier] = &[#(<#inputs>::IDENTIFIER, )*];
+            const TYPES_OUTPUT: &'static [::stabg::Identifier] = &[#(<#outputs>::IDENTIFIER, )*];
+            const STACK_USAGE: usize = ::stabg::determine_stack_usage(#items, &[
+                #(::core::mem::size_of::<#outputs>(), )*
+            ]);
 
             type LoadFut<'s> = impl ::core::future::Future<Output = Result<(), &'static str>> + 's
             where
@@ -183,7 +184,7 @@ pub fn derive_async_execution_queue(input: TokenStream) -> TokenStream {
         #[automatically_derived]
         impl ::stabg::AsyncExecutionQueue for #ident {
             const PROCESSOR_COUNT: usize = #processor_count;
-            const STACK_USAGE: usize = #(#processor_type::STACK_USAGE + )* ::stabg::ExecutionContext::OVERHEAD * Self::PROCESSOR_COUNT;
+            const STACK_USAGE: usize = #(<#processor_type>::STACK_USAGE + )* ::stabg::ExecutionContext::OVERHEAD * Self::PROCESSOR_COUNT;
 
             type Fut<'s> = impl ::core::future::Future<Output = Result<(), ExecutionError>> + 's
             where
@@ -193,8 +194,8 @@ pub fn derive_async_execution_queue(input: TokenStream) -> TokenStream {
                 async move {
                     let types = ::core::iter::empty();
                     #(
-                        let types = types.chain(#processor_type::TYPES_INPUT.iter());
-                        let types = types.chain(#processor_type::TYPES_OUTPUT.iter());
+                        let types = types.chain(<#processor_type>::TYPES_INPUT.iter());
+                        let types = types.chain(<#processor_type>::TYPES_OUTPUT.iter());
                     )*
 
                     let registry = ::stabg::IteratorRegistry(types);

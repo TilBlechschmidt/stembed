@@ -93,10 +93,8 @@ impl From<ExecutionContextError> for ExecutionError {
 ///
 /// Whenever your processor outputs values, it uses up memory of the stack. Since embedded devices require static memory allocation,
 /// the memory usage of our processor needs to be known. You can add the `#[stack_usage]` attribute to provide this information.
-/// In the example below, we expect to output one item and a total of two bytes.
-///
-/// Do note that the number of items and bytes are not related. Both independently describe the maximum number of each quantity
-/// that your processor could potentially output. When in doubt, provide larger values. Too small of a value may crash your or other processors!
+/// In the example below, we expect to output at most one item. Always set the value to the highest number that could occur,
+/// as choosing lower numbers might lead to stack overflows.
 ///
 /// ```
 /// # #![feature(type_alias_impl_trait)]
@@ -122,7 +120,7 @@ impl From<ExecutionContextError> for ExecutionError {
 ///     inputs(SomeInput, SecondaryInput),
 ///     outputs(OtherOutput)
 /// )]
-/// #[stack_usage(items = 1, bytes = 2)]
+/// #[stack_usage(items = 1)]
 /// struct ExampleProcessor;
 ///
 /// // `impl ExampleProcessor` omitted

@@ -10,10 +10,10 @@ struct TestType1(u8);
 
 #[derive(Identifiable)]
 #[identifier(name = "test.type", version = "2")]
-struct TestType2(u8);
+struct TestType2(u16);
 
 #[derive(Default, EmbeddedProcessor)]
-#[stack_usage(items = 2, bytes = 2)]
+#[stack_usage(items = 2)]
 #[type_usage(outputs(TestType1, TestType2))]
 struct TestProcessor1;
 
@@ -49,8 +49,8 @@ impl TestProcessor1 {
     }
 
     async fn process(&mut self, mut ctx: ExecutionContext<'_, '_>) -> Result<(), ExecutionError> {
-        ctx.push(TestType1::IDENTIFIER, &[42])?
-            .push(TestType2::IDENTIFIER, &[69])?;
+        ctx.push_raw(TestType1::IDENTIFIER, &[42])?
+            .push_raw(TestType2::IDENTIFIER, &[69])?;
         Ok(())
     }
 
@@ -63,8 +63,8 @@ impl TestProcessor2 {
     }
 
     async fn process(&mut self, ctx: ExecutionContext<'_, '_>) -> Result<(), ExecutionError> {
-        assert_eq!(ctx.get(TestType1::IDENTIFIER)?[0], 42);
-        assert_eq!(ctx.get(TestType2::IDENTIFIER)?[0], 69);
+        assert_eq!(ctx.get_raw(TestType1::IDENTIFIER)?[0], 42);
+        assert_eq!(ctx.get_raw(TestType2::IDENTIFIER)?[0], 69);
         Ok(())
     }
 

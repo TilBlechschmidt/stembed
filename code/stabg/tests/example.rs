@@ -63,8 +63,8 @@ impl Processor for TestProcessor1 {
         // This is an open question at the momeny because the serialization method is dependent on the context (i.e. embedded or desktop)
         // The serialization algorithm might become a generic arg to the context, or maybe it will be hidden internally.
         context
-            .push(TestType1::IDENTIFIER, &[42])?
-            .push(TestType2::IDENTIFIER, &[69])?;
+            .push_raw(TestType1::IDENTIFIER, &[42])?
+            .push_raw(TestType2::IDENTIFIER, &[69])?;
 
         Ok(())
     }
@@ -84,8 +84,8 @@ impl Processor for TestProcessor2 {
     }
 
     fn process(&mut self, context: ExecutionContext) -> Result<(), ExecutionError> {
-        assert_eq!(context.get(TestType1::IDENTIFIER)?[0], 42);
-        assert_eq!(context.get(TestType2::IDENTIFIER)?[0], 69);
+        assert_eq!(context.get_raw(TestType1::IDENTIFIER)?[0], 42);
+        assert_eq!(context.get_raw(TestType2::IDENTIFIER)?[0], 69);
 
         Ok(())
     }
