@@ -126,21 +126,18 @@ pub type EmbeddedExecutionError = GenericExecutionError<TransmuteError>;
 ///     outputs(OtherOutput)
 /// )]
 /// #[stack_usage(items = 1)]
+/// #[skip_phase(load, unload)]
 /// struct ExampleProcessor;
 ///
-/// // `impl ExampleProcessor` omitted
-/// # impl ExampleProcessor {
-/// #     async fn load(&mut self) -> Result<(), &'static str> {
-/// #         Ok(())
-/// #     }
-/// #
-/// #     async fn process(&mut self, mut ctx: EmbeddedExecutionContext<'_, '_>) -> Result<(), EmbeddedExecutionError> {
-/// #         Ok(())
-/// #     }
-/// #
-/// #     async fn unload(&mut self) {}
-/// # }
+/// impl ExampleProcessor {
+///     async fn process(&mut self, mut ctx: EmbeddedExecutionContext<'_, '_>) -> Result<(), EmbeddedExecutionError> {
+///         Ok(())
+///     }
+/// }
 /// ```
+///
+/// Note that by adding the `#[skip_phase]` attribute, you can save yourself
+/// from writing default implementations for [`load`](Self::load) and [`unload`](Self::unload) and instead have the macro generate them.
 #[cfg(feature = "nightly")]
 pub trait EmbeddedProcessor {
     /// List of types that will be retrieved from the context during execution

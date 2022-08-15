@@ -1,4 +1,7 @@
-use darling::{util::PathList, Error, FromDeriveInput};
+use darling::{
+    util::{Flag, PathList},
+    Error, FromDeriveInput,
+};
 use proc_macro::{self, TokenStream};
 use proc_macro_error::abort;
 use quote::quote;
@@ -25,6 +28,13 @@ struct TypeUsageOpts {
     inputs: PathList,
     #[darling(default)]
     outputs: PathList,
+}
+
+#[derive(FromDeriveInput, Default)]
+#[darling(attributes(skip_phase), forward_attrs(allow, doc, cfg))]
+struct SkipPhaseOpts {
+    load: Flag,
+    unload: Flag,
 }
 
 #[proc_macro_derive(Identifiable, attributes(identifier))]
@@ -54,7 +64,7 @@ pub fn derive_identifiable(input: TokenStream) -> TokenStream {
     output.into()
 }
 
-#[proc_macro_derive(EmbeddedProcessor, attributes(stack_usage, type_usage))]
+#[proc_macro_derive(EmbeddedProcessor, attributes(stack_usage, type_usage, skip_phase))]
 pub fn derive_embedded_processor(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let mut errors = Error::accumulator();
@@ -75,6 +85,28 @@ pub fn derive_embedded_processor(input: TokenStream) -> TokenStream {
                 PathList::new(Vec::<syn::Path>::new()),
                 PathList::new(Vec::<syn::Path>::new()),
             )
+        }
+    };
+
+    let (load, unload) = match SkipPhaseOpts::from_derive_input(&input) {
+        Ok(SkipPhaseOpts { load, unload }) => {
+            let load = if load.is_present() {
+                quote! { async move { Ok(()) } }
+            } else {
+                quote! { async move { self.load().await } }
+            };
+
+            let unload = if unload.is_present() {
+                quote! { async move {} }
+            } else {
+                quote! { async move { self.unload().await } }
+            };
+
+            (load, unload)
+        }
+        Err(err) => {
+            errors.push(err);
+            (quote! {}, quote! {})
         }
     };
 
@@ -111,7 +143,7 @@ pub fn derive_embedded_processor(input: TokenStream) -> TokenStream {
                 Self: 's;
 
             fn load_raw<'s>(&'s mut self) -> Self::LoadFut<'s> {
-                async move { self.load().await }
+                #load
             }
 
             fn process_raw<'s>(&'s mut self, context: ::stabg::processor::EmbeddedExecutionContext<'s, 's>) -> Self::ProcessFut<'s> {
@@ -119,7 +151,7 @@ pub fn derive_embedded_processor(input: TokenStream) -> TokenStream {
             }
 
             fn unload_raw<'s>(&'s mut self) -> Self::UnloadFut<'s> {
-                async move { self.unload().await }
+                #unload
             }
         }
     };

@@ -5,7 +5,12 @@
 #[cfg(all(feature = "nightly", feature = "derive"))]
 mod does {
     use serde::{Deserialize, Serialize};
-    use stabg::{processor::*, *};
+    use stabg::{
+        processor::{
+            EmbeddedExecutionContext as Context, EmbeddedExecutionError as Error, EmbeddedProcessor,
+        },
+        *,
+    };
 
     #[derive(Identifiable, Serialize, Deserialize, PartialEq, Debug)]
     #[identifier(name = "test.type", version = "1")]
@@ -18,10 +23,12 @@ mod does {
     #[derive(Default, EmbeddedProcessor)]
     #[stack_usage(items = 2)]
     #[type_usage(outputs(TestType1, TestType2))]
+    #[skip_phase(load, unload)]
     struct TestProcessor1;
 
     #[derive(Default, EmbeddedProcessor)]
     #[type_usage(inputs(TestType1, TestType2))]
+    #[skip_phase(load, unload)]
     struct TestProcessor2;
 
     #[derive(Default, AsyncExecutionQueue)]
@@ -47,36 +54,18 @@ mod does {
     }
 
     impl TestProcessor1 {
-        async fn load(&mut self) -> Result<(), &'static str> {
-            Ok(())
-        }
-
-        async fn process(
-            &mut self,
-            mut ctx: EmbeddedExecutionContext<'_, '_>,
-        ) -> Result<(), EmbeddedExecutionError> {
+        async fn process(&mut self, mut ctx: Context<'_, '_>) -> Result<(), Error> {
             ctx.push(TestType1(42))?;
             ctx.push(TestType2(69))?;
             Ok(())
         }
-
-        async fn unload(&mut self) {}
     }
 
     impl TestProcessor2 {
-        async fn load(&mut self) -> Result<(), &'static str> {
-            Ok(())
-        }
-
-        async fn process(
-            &mut self,
-            ctx: EmbeddedExecutionContext<'_, '_>,
-        ) -> Result<(), EmbeddedExecutionError> {
+        async fn process(&mut self, ctx: Context<'_, '_>) -> Result<(), Error> {
             assert_eq!(ctx.get::<TestType1>()?, TestType1(42));
             assert_eq!(ctx.get::<TestType2>()?, TestType2(69));
             Ok(())
         }
-
-        async fn unload(&mut self) {}
     }
 }
