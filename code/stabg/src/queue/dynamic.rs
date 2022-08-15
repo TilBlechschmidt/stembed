@@ -1,10 +1,10 @@
 use super::ExecutionQueue;
 use crate::{
-    context::ExecutionContext,
     identifier::ShortID,
     processor::Processor,
-    processor::{ExecutionError, InitializationContext},
+    processor::{ExecutionContext, ExecutionError, InitializationContext},
     registry::DynamicRegistry,
+    serialization::JsonSerializer,
     stack::Stack,
     Identifier,
 };
@@ -124,7 +124,7 @@ impl DynamicExecutionQueue {
                     .input
                     .iter()
                     .filter(|i| !available_types.contains(i))
-                    .map(|i| *i)
+                    .copied()
                     .collect::<Vec<_>>()
                     .join(", ");
 
@@ -168,6 +168,12 @@ impl DynamicExecutionQueue {
     }
 }
 
+impl Default for DynamicExecutionQueue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExecutionQueue for DynamicExecutionQueue {
     fn run(
         &mut self,
@@ -191,7 +197,7 @@ impl ExecutionQueue for DynamicExecutionQueue {
 
         // Go through all processors
         for (id, processor) in pending_processors {
-            let context = ExecutionContext::new(stack, id, &mut self.registry);
+            let context = ExecutionContext::new(stack, id, &self.registry, JsonSerializer);
             let result = processor.process(context);
 
             if self.abort_on_error {
@@ -283,11 +289,11 @@ mod does {
         let mut data = source.clone();
         let drained = drain_filter(&mut data, |_| true);
         assert_eq!(drained, [0, 1, 2, 3, 4]);
-        assert_eq!(data, []);
+        assert!(data.is_empty());
 
         let mut data = source.clone();
         let drained = drain_filter(&mut data, |_| false);
-        assert_eq!(drained, []);
+        assert!(drained.is_empty());
         assert_eq!(data, [0, 1, 2, 3, 4]);
 
         let mut data = source.clone();

@@ -4,20 +4,20 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-# TODO Remove both by default :D
-default = ["alloc", "nightly", "derive"]
+# TODO Remove everything but nightly by default
+default = ["nightly", "alloc", "derive"]
+# Enables derive macros for an easier user experience
+derive = ["stabg-derive", "serde/derive"]
 # Switches to allocation based stack & registries
-alloc = ["log"]
+alloc = ["log", "serde_json"]
 # Enables asynchronous traits for async processors
 nightly = []
-# Enables derive macros for an easier user experience
-derive = ["stabg-derive"]
 
 [dependencies]
-# serde = { version = "1.0.*", default-features = false }
-# postcard = "1.0.0"
 log = { version = "0.4.17", optional = true }
 stabg-derive = { path = "./stabg-derive", optional = true }
+serde = { version = "1.0", default-features = false }
+serde_json = { version = "1.0.0", features = ["alloc"], default-features = false, optional = true }
 
 [dev-dependencies]
 env_logger = "0.9"

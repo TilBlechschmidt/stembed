@@ -102,7 +102,7 @@ pub fn derive_embedded_processor(input: TokenStream) -> TokenStream {
             where
                 Self: 's;
 
-            type ProcessFut<'s> = impl ::core::future::Future<Output = Result<(), ::stabg::processor::ExecutionError>> + 's
+            type ProcessFut<'s> = impl ::core::future::Future<Output = Result<(), ::stabg::processor::EmbeddedExecutionError>> + 's
             where
                 Self: 's;
 
@@ -114,7 +114,7 @@ pub fn derive_embedded_processor(input: TokenStream) -> TokenStream {
                 async move { self.load().await }
             }
 
-            fn process_raw<'s>(&'s mut self, context: ::stabg::ExecutionContext<'s, 's>) -> Self::ProcessFut<'s> {
+            fn process_raw<'s>(&'s mut self, context: ::stabg::processor::EmbeddedExecutionContext<'s, 's>) -> Self::ProcessFut<'s> {
                 async move { self.process(context).await }
             }
 
@@ -184,9 +184,9 @@ pub fn derive_async_execution_queue(input: TokenStream) -> TokenStream {
         #[automatically_derived]
         impl ::stabg::AsyncExecutionQueue for #ident {
             const PROCESSOR_COUNT: usize = #processor_count;
-            const STACK_USAGE: usize = #(<#processor_type>::STACK_USAGE + )* ::stabg::ExecutionContext::OVERHEAD * Self::PROCESSOR_COUNT;
+            const STACK_USAGE: usize = #(<#processor_type>::STACK_USAGE + )* ::stabg::processor::EmbeddedExecutionContext::OVERHEAD * Self::PROCESSOR_COUNT;
 
-            type Fut<'s> = impl ::core::future::Future<Output = Result<(), ExecutionError>> + 's
+            type Fut<'s> = impl ::core::future::Future<Output = Result<(), ::stabg::processor::EmbeddedExecutionError>> + 's
             where
                 Self: 's;
 
@@ -199,6 +199,7 @@ pub fn derive_async_execution_queue(input: TokenStream) -> TokenStream {
                     )*
 
                     let registry = ::stabg::IteratorRegistry(types);
+                    let serializer = unsafe { ::stabg::serialization::TransmuteSerializer::new() };
 
                     let mut id: ShortID = 0;
                     let mut running = start_id.is_none();
@@ -209,7 +210,7 @@ pub fn derive_async_execution_queue(input: TokenStream) -> TokenStream {
                         }
 
                         if running {
-                            let context = ::stabg::ExecutionContext::new(stack, id, &registry);
+                            let context = ::stabg::processor::EmbeddedExecutionContext::new(stack, id, &registry, serializer);
                             self.#processor_ident.process(context).await?;
                         }
 

@@ -11,8 +11,7 @@ where
     fn lookup(&self, id: Identifier) -> Option<ShortID> {
         // Compress identifiers by deduplicating the iterator before calling `.find`
         // That way we don't have unused identifiers where types are present twice
-        let is_first =
-            |(i, x): &(usize, &Identifier)| self.0.clone().take(*i).find(|x2| x2 == x).is_none();
+        let is_first = |(i, x): &(usize, &Identifier)| self.0.clone().take(*i).any(|x2| &x2 == x);
 
         self.0
             .clone()

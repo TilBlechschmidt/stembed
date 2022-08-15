@@ -1,19 +1,16 @@
-use core::future::Future;
-
-use crate::{processor::ExecutionError, ShortID, Stack};
-
 #[cfg(feature = "alloc")]
 mod dynamic;
 
 #[cfg(feature = "alloc")]
 pub use dynamic::DynamicExecutionQueue;
 
+#[cfg(feature = "alloc")]
 pub trait ExecutionQueue {
     fn run(
         &mut self,
-        start_id: Option<ShortID>,
-        stack: &mut dyn Stack,
-    ) -> Result<(), ExecutionError>;
+        start_id: Option<crate::ShortID>,
+        stack: &mut dyn crate::Stack,
+    ) -> Result<(), crate::processor::ExecutionError>;
 }
 
 #[cfg(feature = "nightly")]
@@ -25,9 +22,14 @@ pub trait AsyncExecutionQueue {
     /// Number of processors in the queue, used for calculating per-processor stack overhead
     const PROCESSOR_COUNT: usize;
 
-    type Fut<'s>: Future<Output = Result<(), ExecutionError>> + 's
+    type Fut<'s>: core::future::Future<Output = Result<(), crate::processor::EmbeddedExecutionError>>
+        + 's
     where
         Self: 's;
 
-    fn run<'s>(&'s mut self, start_id: Option<ShortID>, stack: &'s mut dyn Stack) -> Self::Fut<'s>;
+    fn run<'s>(
+        &'s mut self,
+        start_id: Option<crate::ShortID>,
+        stack: &'s mut dyn crate::Stack,
+    ) -> Self::Fut<'s>;
 }

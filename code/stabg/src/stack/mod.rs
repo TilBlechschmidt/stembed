@@ -41,6 +41,7 @@ pub trait Stack {
 /// Hence, we can statically calculate the stack usage of a processor if we know the sizes of the types it
 /// will output and the number of outputs it will make. If anything, this produces a high estimate but that is fine.
 #[doc(hidden)]
+#[allow(clippy::never_loop)]
 pub const fn determine_stack_usage(output_count: usize, output_type_sizes: &[usize]) -> usize {
     if output_count == 0 {
         return 0;
@@ -63,7 +64,7 @@ pub const fn determine_stack_usage(output_count: usize, output_type_sizes: &[usi
         return (FixedSizeStack::<0>::OVERHEAD + output_type_sizes[x]) * output_count;
     }
 
-    return 0;
+    0
 }
 
 #[cfg(test)]

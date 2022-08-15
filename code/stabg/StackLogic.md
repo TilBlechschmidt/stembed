@@ -2,9 +2,6 @@
 - Reverse order of values in ValueSet (because otherwise its *really* unintuitive ...)
 
 # High-level TODOs
-- Build serialization/deserialization API for embedded/desktop
-    - Behind `serde` feature flag, make the algorithm itself exchangeable!
-    - "Serialize" on embedded by either transmuting into byte slices or just straight up storing raw pointer+len and "forgetting" the memory temporarily in regards to the borrow checker
 - Build stack debugging tools <3
 - Add remaining docs
     - `Executor`

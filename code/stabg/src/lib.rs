@@ -14,6 +14,7 @@ mod registry;
 mod stack;
 
 pub mod processor;
+pub mod serialization;
 
 pub use context::*;
 pub use executor::Executor;
@@ -27,8 +28,8 @@ pub use registry::IteratorRegistry;
 /// Automatically implements the [`Identifiable`](self::Identifiable) trait.
 ///
 /// Nothing really special, but makes the code a little more legible!
-/// You can optionally add a version attribute which will concatenate the provided
-/// version string separated by a `-`.
+/// You can optionally add a version attribute which will append the provided
+/// version string with a `-`.
 ///
 /// # Examples
 ///

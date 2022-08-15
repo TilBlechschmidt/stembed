@@ -1,7 +1,8 @@
 use super::{Identifier, ShortID};
 
+#[allow(dead_code)]
 const RESERVED_COUNT: u32 = 2;
-pub(crate) const ID_VALUE_SET: ShortID = ShortID::MAX - 0;
+pub(crate) const ID_VALUE_SET: ShortID = ShortID::MAX;
 pub(crate) const ID_PROC_MARK: ShortID = ShortID::MAX - 1;
 
 #[cfg(feature = "alloc")]

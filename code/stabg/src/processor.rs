@@ -1,18 +1,20 @@
 //! Traits & types for user-provided logic components
 
+// This fires for traits in GATs :(
+#![allow(clippy::needless_lifetimes)]
+
 use crate::{
-    context::{ExecutionContext, ExecutionContextError},
-    Identifiable, Identifier,
+    context::{ExecutionContextError, GenericExecutionContext},
+    serialization::{TransmuteError, TransmuteSerializer},
 };
-use core::future::Future;
 
 // TODO Document what happens when not all types are provided/registered, aka death :D
 
 /// Errors encountered while executing a processor
 #[derive(Debug)]
-pub enum ExecutionError {
+pub enum GenericExecutionError<E> {
     /// Transitive errors caused by the execution context passed into the processor during execution.
-    ContextError(ExecutionContextError),
+    ContextError(ExecutionContextError<E>),
 
     /// Unknown internal error from within the plugin, unrelated to the execution context.
     /// Turns into a `String` when the `alloc` feature is enabled!
@@ -25,11 +27,14 @@ pub enum ExecutionError {
     InternalError(::alloc::string::String),
 }
 
-impl From<ExecutionContextError> for ExecutionError {
-    fn from(e: ExecutionContextError) -> Self {
+impl<E> From<ExecutionContextError<E>> for GenericExecutionError<E> {
+    fn from(e: ExecutionContextError<E>) -> Self {
         Self::ContextError(e)
     }
 }
+
+pub type EmbeddedExecutionContext<'a, 'b> = GenericExecutionContext<'a, 'b, TransmuteSerializer>;
+pub type EmbeddedExecutionError = GenericExecutionError<TransmuteError>;
 
 /// User-provided logic component, asynchronous counterpart to the regular processor
 ///
@@ -65,7 +70,7 @@ impl From<ExecutionContextError> for ExecutionError {
 /// #![feature(type_alias_impl_trait)]
 /// #![feature(generic_associated_types)]
 /// #
-/// # use stabg::{processor::{ExecutionError, EmbeddedProcessor}, ExecutionContext, Identifier};
+/// # use stabg::{processor::{EmbeddedExecutionError, EmbeddedProcessor, EmbeddedExecutionContext}, Identifier};
 /// # use core::future::Future;
 ///
 /// #[derive(Default, EmbeddedProcessor)]
@@ -76,7 +81,7 @@ impl From<ExecutionContextError> for ExecutionError {
 ///         Ok(())
 ///     }
 ///
-///     async fn process(&mut self, mut ctx: ExecutionContext<'_, '_>) -> Result<(), ExecutionError> {
+///     async fn process(&mut self, mut ctx: EmbeddedExecutionContext<'_, '_>) -> Result<(), EmbeddedExecutionError> {
 ///         Ok(())
 ///     }
 ///
@@ -100,7 +105,7 @@ impl From<ExecutionContextError> for ExecutionError {
 /// # #![feature(type_alias_impl_trait)]
 /// # #![feature(generic_associated_types)]
 /// #
-/// # use stabg::{processor::{ExecutionError, EmbeddedProcessor}, ExecutionContext, Identifier, Identifiable};
+/// # use stabg::{processor::{EmbeddedExecutionError, EmbeddedProcessor, EmbeddedExecutionContext}, Identifier, Identifiable};
 /// # use core::future::Future;
 /// #
 /// #[derive(Identifiable)]
@@ -129,7 +134,7 @@ impl From<ExecutionContextError> for ExecutionError {
 /// #         Ok(())
 /// #     }
 /// #
-/// #     async fn process(&mut self, mut ctx: ExecutionContext<'_, '_>) -> Result<(), ExecutionError> {
+/// #     async fn process(&mut self, mut ctx: EmbeddedExecutionContext<'_, '_>) -> Result<(), EmbeddedExecutionError> {
 /// #         Ok(())
 /// #     }
 /// #
@@ -139,10 +144,10 @@ impl From<ExecutionContextError> for ExecutionError {
 #[cfg(feature = "nightly")]
 pub trait EmbeddedProcessor {
     /// List of types that will be retrieved from the context during execution
-    const TYPES_INPUT: &'static [Identifier];
+    const TYPES_INPUT: &'static [crate::Identifier];
 
     /// List of types that will be pushed into the context during execution
-    const TYPES_OUTPUT: &'static [Identifier];
+    const TYPES_OUTPUT: &'static [crate::Identifier];
 
     /// Estimated maximum size of the largest set of values that could be pushed onto the stack during execution.
     /// You should add four additional bytes per value due to internal overhead!
@@ -152,15 +157,15 @@ pub trait EmbeddedProcessor {
     /// and undefined behaviour.
     const STACK_USAGE: usize;
 
-    type LoadFut<'s>: Future<Output = Result<(), &'static str>> + 's
+    type LoadFut<'s>: core::future::Future<Output = Result<(), &'static str>> + 's
     where
         Self: 's;
 
-    type ProcessFut<'s>: Future<Output = Result<(), ExecutionError>> + 's
+    type ProcessFut<'s>: core::future::Future<Output = Result<(), EmbeddedExecutionError>> + 's
     where
         Self: 's;
 
-    type UnloadFut<'s>: Future<Output = ()> + 's
+    type UnloadFut<'s>: core::future::Future<Output = ()> + 's
     where
         Self: 's;
 
@@ -171,7 +176,10 @@ pub trait EmbeddedProcessor {
     /// Note that depending on the output of previous processors, it may run multiple times per cycle!
     ///
     /// Usually you would not implement this method yourself but instead rely upon the derive macro. See the example for more details!
-    fn process_raw<'s>(&'s mut self, context: ExecutionContext<'s, 's>) -> Self::ProcessFut<'s>;
+    fn process_raw<'s>(
+        &'s mut self,
+        context: EmbeddedExecutionContext<'s, 's>,
+    ) -> Self::ProcessFut<'s>;
 
     /// Contains any cleanup required when your processor is removed. This may include side-effects caused in the [`load`](Self::load) function!
     fn unload_raw<'s>(&'s mut self) -> Self::UnloadFut<'s>;
@@ -189,7 +197,13 @@ pub use self::alloc::*;
 #[cfg(feature = "alloc")]
 mod alloc {
     use super::*;
+    use crate::{serialization::JsonSerializer, Identifiable, Identifier};
     use ::alloc::vec::Vec;
+
+    #[doc(cfg(feature = "alloc"))]
+    pub type ExecutionContext<'a, 'b> = GenericExecutionContext<'a, 'b, JsonSerializer>;
+    #[doc(cfg(feature = "alloc"))]
+    pub type ExecutionError = GenericExecutionError<serde_json::Error>;
 
     /// User-provided logic component — `The Heart Of The System` ❤️
     #[doc(cfg(feature = "alloc"))]

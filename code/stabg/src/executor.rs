@@ -1,8 +1,7 @@
 use crate::{
-    processor::ExecutionError,
     registry::{ID_PROC_MARK, ID_VALUE_SET},
     stack::Stack,
-    AsyncExecutionQueue, ExecutionQueue, ShortID,
+    ShortID,
 };
 
 pub struct Executor<'s> {
@@ -74,10 +73,11 @@ impl<'s> Executor<'s> {
         None
     }
 
+    #[cfg(feature = "alloc")]
     pub fn execute_sync(
         &mut self,
-        execution_queue: &mut dyn ExecutionQueue,
-    ) -> Result<(), ExecutionError> {
+        execution_queue: &mut dyn crate::ExecutionQueue,
+    ) -> Result<(), crate::processor::ExecutionError> {
         // Remove any remainders from previous runs
         self.stack.clear();
 
@@ -92,10 +92,11 @@ impl<'s> Executor<'s> {
         Ok(())
     }
 
-    pub async fn execute_async<Q: AsyncExecutionQueue>(
+    #[cfg(feature = "nightly")]
+    pub async fn execute_async<Q: crate::AsyncExecutionQueue>(
         &mut self,
         execution_queue: &mut Q,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), crate::processor::EmbeddedExecutionError> {
         // Remove any remainders from previous runs
         self.stack.clear();
 
