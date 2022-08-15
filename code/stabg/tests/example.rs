@@ -53,12 +53,8 @@ mod alloc {
         }
 
         fn process(&mut self, mut ctx: ExecutionContext) -> Result<(), ExecutionError> {
-            // Currently, there is no strongly typed APIs to push/get values. There will be some, they should become the default!
-            //
-            // This is an open question at the momeny because the serialization method is dependent on the context (i.e. embedded or desktop)
-            // The serialization algorithm might become a generic arg to the context, or maybe it will be hidden internally.
-            ctx.push(TestType1(42))?.push(TestType2(69))?;
-
+            ctx.push(TestType1(42))?;
+            ctx.push(TestType2(69))?;
             Ok(())
         }
     }

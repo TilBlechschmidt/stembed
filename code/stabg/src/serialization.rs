@@ -44,8 +44,8 @@ impl Serializer for JsonSerializer {
 /// Errors that may occur while transmuting raw memory into types
 #[derive(Debug)]
 pub enum TransmuteError {
-    /// Source slice did not have enough bytes available to deserialize into the given type
-    NotEnoughBytes,
+    /// Source slice length did not match the expected number of bytes for deserialization
+    SliceLengthMismatch,
 }
 
 /// Transmutes types to and from byte slices through `unsafe` crimes
@@ -92,8 +92,8 @@ impl Serializer for TransmuteSerializer {
     fn deserialize<T: DeserializeOwned>(&self, buf: &[u8]) -> Result<T, Self::Error> {
         let len = core::mem::size_of::<T>();
 
-        if buf.len() < len {
-            Err(Self::Error::NotEnoughBytes)
+        if buf.len() != len {
+            Err(Self::Error::SliceLengthMismatch)
         } else {
             let mut value = core::mem::MaybeUninit::<T>::zeroed();
             let ptr = value.as_mut_ptr() as *mut u8;
