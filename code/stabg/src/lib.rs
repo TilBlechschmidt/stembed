@@ -54,4 +54,7 @@ pub use registry::IteratorRegistry;
 pub use stabg_derive::Identifiable;
 
 #[cfg(feature = "derive")]
+pub use stabg_derive::EmbeddedProcessor;
+
+#[cfg(feature = "derive")]
 pub use stabg_derive::AsyncExecutionQueue;

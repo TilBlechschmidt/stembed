@@ -1,7 +1,7 @@
 use crate::{
     registry::{Registry, ID_PROC_MARK, ID_VALUE_SET},
     stack::{self, Stack},
-    Identifier, ShortID,
+    FixedSizeStack, Identifier, ShortID,
 };
 
 /// Errors caused by using the [`ExecutionContext`](ExecutionContext)'s API
@@ -29,6 +29,10 @@ pub struct ExecutionContext<'s, 'r> {
 }
 
 impl<'s, 'r> ExecutionContext<'s, 'r> {
+    /// Maximum number of bytes pushed onto the stack per instance
+    // Contains PROC_MARK + VALUE_SET with the corresponding overhead from the stack
+    pub const OVERHEAD: usize = (FixedSizeStack::<0>::OVERHEAD + (ShortID::BITS as usize / 8)) * 2;
+
     #[doc(hidden)]
     pub fn new(stack: &'s mut dyn Stack, processor: ShortID, registry: &'r dyn Registry) -> Self {
         Self {

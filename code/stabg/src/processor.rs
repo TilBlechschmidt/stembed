@@ -81,7 +81,7 @@ impl From<ExecutionContextError> for ExecutionError {
 ///         Self: 's;
 ///
 ///     // 2. The type 'blank' is filled in by using it as the return type of your function
-///     fn process<'s>(&'s mut self, context: ExecutionContext) -> Self::Fut<'s> {
+///     fn process_raw<'s>(&'s mut self, context: ExecutionContext) -> Self::Fut<'s> {
 ///         async move {
 ///             Ok(())
 ///         }
@@ -117,7 +117,9 @@ pub trait EmbeddedProcessor {
 
     /// Core logic of your processor that will be called each iteration cycle.
     /// Note that depending on the output of previous processors, it may run multiple times per cycle!
-    fn process<'s>(&'s mut self, context: ExecutionContext<'s, 's>) -> Self::Fut<'s>;
+    ///
+    /// Usually you would not implement this method yourself but instead rely upon the derive macro. See the example for more details!
+    fn process_raw<'s>(&'s mut self, context: ExecutionContext<'s, 's>) -> Self::Fut<'s>;
 
     /// Contains any cleanup required when your processor is removed. This may include side-effects caused in the [`load`](Self::load) function!
     fn unload(&mut self) {}

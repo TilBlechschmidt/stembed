@@ -22,6 +22,9 @@ pub trait AsyncExecutionQueue {
     /// Read [`EmbeddedProcessor::STACK_USAGE`](crate::processor::EmbeddedProcessor::STACK_USAGE) for more details.
     const STACK_USAGE: usize;
 
+    /// Number of processors in the queue, used for calculating per-processor stack overhead
+    const PROCESSOR_COUNT: usize;
+
     type Fut<'s>: Future<Output = Result<(), ExecutionError>> + 's
     where
         Self: 's;

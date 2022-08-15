@@ -1,20 +1,12 @@
 # Detailed TODOs
-- Add diags to `fn optimize`
-- Derive macro can also generate code to statically check the execution order
+- Add diags output to `ExecutionQueue::optimize`
+- Have derive macro for queue generate const order-checking code
 - Make EmbeddedProcessor load/unload async
-- Add derive macro for EmbeddedProcessor
-	- Automatically infer stack usage based on item & byte count
-	- Add inputs/outputs based on optional attributes
-	- Figure out a way make calls to load/unload optional?
-	- Once async traits are supported, move the fn itself back outside the derive and just auto-add the stack size & inputs/outputs
-
-```
-#[derive(EmbeddedProcessor, Default)]
-#[inputs(TestType2)]                      // Optional
-#[outputs(TestType1, TestType2)]          // Optional
-#[stack_usage(items = 10, bytes = 32)]
-struct TestProcessor1;
-```
+- Extend derive macro for EmbeddedProcessor
+    - Add support for load/unload
+	   - Figure out a way make calls to load/unload optional?
+- Update documentation for EmbeddedProcessor
+- Reverse order of values in ValueSet (because otherwise its *really* unintuitive ...)
 
 # High-level TODOs
 - Add remaining docs
@@ -24,7 +16,6 @@ struct TestProcessor1;
     - Behind `serde` feature flag, make the algorithm itself exchangeable!
     - "Serialize" on embedded by either transmuting into byte slices or just straight up storing raw pointer+len and "forgetting" the memory temporarily in regards to the borrow checker
 - Implement alloc based stack
-- Expose collection diagnostics on desktop
 - Build supporting crate for inputs (stabg-input?)
     - `InputProcessor` for desktop
     - `make_input_processor` macro for embedded
