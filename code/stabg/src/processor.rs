@@ -59,7 +59,7 @@ impl From<ExecutionContextError> for ExecutionError {
 /// # Example
 ///
 /// In the future we will have full support for async traits! Though that is still some time out —
-/// so until then you have to follow some additional steps to unleash the magic:
+/// so to save you all the boilerplating, we created a derive macro for you. Here is a minimal example on how to use it:
 ///
 /// ```
 /// #![feature(type_alias_impl_trait)]
@@ -68,27 +68,75 @@ impl From<ExecutionContextError> for ExecutionError {
 /// # use stabg::{processor::{ExecutionError, EmbeddedProcessor}, ExecutionContext, Identifier};
 /// # use core::future::Future;
 ///
+/// #[derive(Default, EmbeddedProcessor)]
 /// struct ExampleProcessor;
 ///
-/// impl EmbeddedProcessor for ExampleProcessor {
-///     const TYPES_INPUT: &'static [Identifier] = &[];
-///     const TYPES_OUTPUT: &'static [Identifier] = &[];
-///     const STACK_USAGE: usize = 0;
-///
-///     // 1. Define an opaque, generic type for the Future you will return
-///     type Fut<'s> = impl Future<Output = Result<(), ExecutionError>> + 's
-///     where
-///         Self: 's;
-///
-///     // 2. The type 'blank' is filled in by using it as the return type of your function
-///     fn process_raw<'s>(&'s mut self, context: ExecutionContext) -> Self::Fut<'s> {
-///         async move {
-///             Ok(())
-///         }
+/// impl ExampleProcessor {
+///     async fn load(&mut self) -> Result<(), &'static str> {
+///         Ok(())
 ///     }
 ///
-///     // load & unload omitted for brevity
+///     async fn process(&mut self, mut ctx: ExecutionContext<'_, '_>) -> Result<(), ExecutionError> {
+///         Ok(())
+///     }
+///
+///     async fn unload(&mut self) {}
 /// }
+/// ```
+///
+/// The generated `impl EmbeddedProcessor` will call your load, unload, and process functions which are required to have the above method signature.
+///
+/// ## Type & stack usage annotations
+///
+/// While regular processors register their type usage at runtime, embedded processors are required to provide this information at compile time.
+/// With the derive macro, you can add the `#[type_usage]` attribute to generate the necessary constants automatically.
+///
+/// Whenever your processor outputs values, it uses up memory of the stack. Since embedded devices require static memory allocation,
+/// the memory usage of our processor needs to be known. You can add the `#[stack_usage]` attribute to provide this information.
+/// In the example below, we expect to output one item and a total of two bytes.
+///
+/// Do note that the number of items and bytes are not related. Both independently describe the maximum number of each quantity
+/// that your processor could potentially output. When in doubt, provide larger values. Too small of a value may crash your or other processors!
+///
+/// ```
+/// # #![feature(type_alias_impl_trait)]
+/// # #![feature(generic_associated_types)]
+/// #
+/// # use stabg::{processor::{ExecutionError, EmbeddedProcessor}, ExecutionContext, Identifier, Identifiable};
+/// # use core::future::Future;
+/// #
+/// #[derive(Identifiable)]
+/// #[identifier(name = "example.input.main")]
+/// struct SomeInput(u8);
+///
+/// #[derive(Identifiable)]
+/// #[identifier(name = "example.input.secondary")]
+/// struct SecondaryInput(u8);
+///
+/// #[derive(Identifiable)]
+/// #[identifier(name = "example.output.other")]
+/// struct OtherOutput(u16);
+///
+/// #[derive(Default, EmbeddedProcessor)]
+/// #[type_usage(
+///     inputs(SomeInput, SecondaryInput),
+///     outputs(OtherOutput)
+/// )]
+/// #[stack_usage(items = 1, bytes = 2)]
+/// struct ExampleProcessor;
+///
+/// // `impl ExampleProcessor` omitted
+/// # impl ExampleProcessor {
+/// #     async fn load(&mut self) -> Result<(), &'static str> {
+/// #         Ok(())
+/// #     }
+/// #
+/// #     async fn process(&mut self, mut ctx: ExecutionContext<'_, '_>) -> Result<(), ExecutionError> {
+/// #         Ok(())
+/// #     }
+/// #
+/// #     async fn unload(&mut self) {}
+/// # }
 /// ```
 #[cfg(feature = "nightly")]
 pub trait EmbeddedProcessor {
@@ -106,24 +154,36 @@ pub trait EmbeddedProcessor {
     /// and undefined behaviour.
     const STACK_USAGE: usize;
 
-    type Fut<'s>: Future<Output = Result<(), ExecutionError>> + 's
+    type LoadFut<'s>: Future<Output = Result<(), &'static str>> + 's
+    where
+        Self: 's;
+
+    type ProcessFut<'s>: Future<Output = Result<(), ExecutionError>> + 's
+    where
+        Self: 's;
+
+    type UnloadFut<'s>: Future<Output = ()> + 's
     where
         Self: 's;
 
     /// Allows you to trigger side-effects and make calculations before your processor is executed the first time
-    fn load(&mut self) -> Result<(), &'static str> {
-        Ok(())
-    }
+    fn load_raw<'s>(&'s mut self) -> Self::LoadFut<'s>;
 
     /// Core logic of your processor that will be called each iteration cycle.
     /// Note that depending on the output of previous processors, it may run multiple times per cycle!
     ///
     /// Usually you would not implement this method yourself but instead rely upon the derive macro. See the example for more details!
-    fn process_raw<'s>(&'s mut self, context: ExecutionContext<'s, 's>) -> Self::Fut<'s>;
+    fn process_raw<'s>(&'s mut self, context: ExecutionContext<'s, 's>) -> Self::ProcessFut<'s>;
 
     /// Contains any cleanup required when your processor is removed. This may include side-effects caused in the [`load`](Self::load) function!
-    fn unload(&mut self) {}
+    fn unload_raw<'s>(&'s mut self) -> Self::UnloadFut<'s>;
 }
+
+/// Abstracts away all the async trait boilerplating
+///
+/// For more details, usage instructions, and examples, take a look at the [`EmbeddedProcessor`](EmbeddedProcessor) traits documentation!
+#[cfg(all(feature = "derive", feature = "nightly"))]
+pub use stabg_derive::EmbeddedProcessor;
 
 #[cfg(feature = "alloc")]
 pub use self::alloc::*;
@@ -134,6 +194,7 @@ mod alloc {
     use ::alloc::vec::Vec;
 
     /// User-provided logic component — `The Heart Of The System` ❤️
+    #[doc(cfg(feature = "alloc"))]
     pub trait Processor {
         /// Globally unique identifier for this processor mostly used for debugging purposes
         fn identifier(&self) -> Identifier;
@@ -146,7 +207,10 @@ mod alloc {
         /// The execution order of plugins is derived from the inputs & outputs they claim to use. Providing false or no information
         /// by not implementing this function according to the contents of your [`process`](Self::process) function **may result in your processor
         /// crashing or not executing at all!**
-        fn load(&mut self, context: &mut InitializationContext) -> Result<(), InitializationError>;
+        fn load(
+            &mut self,
+            context: &mut InitializationContext,
+        ) -> Result<(), ::alloc::string::String>;
 
         /// Core logic of your processor that will be called each iteration cycle.
         /// Note that depending on the output of previous processors, it may run multiple times per cycle!
@@ -156,16 +220,10 @@ mod alloc {
         fn unload(&mut self) {}
     }
 
-    /// Errors caused while initializing a dynamic [`Processor`](Processor)
-    #[derive(Debug)]
-    pub enum InitializationError {
-        /// Unknown internal error from within the plugin, unrelated to the initialization context.
-        InternalError(::alloc::string::String),
-    }
-
     /// Purposes for which a [`Processor`](Processor) will use a type
     ///
     /// Used when registering types with the [`InitializationContext`](InitializationContext) in [`Processor::load`](Processor::load)
+    #[doc(cfg(feature = "alloc"))]
     pub enum TypeUsage {
         /// Values of the given type will only be *fetched from the stack*
         Input,
@@ -184,6 +242,7 @@ mod alloc {
     ///
     /// This registration logic provides the information to the [`ProcessorCollection`](crate::desktop::ProcessorCollection)
     /// what values you depend on and can provide. It then derives an execution order from this information!
+    #[doc(cfg(feature = "alloc"))]
     pub struct InitializationContext {
         pub(crate) input: Vec<Identifier>,
         pub(crate) output: Vec<Identifier>,

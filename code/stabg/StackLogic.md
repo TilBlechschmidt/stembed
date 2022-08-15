@@ -1,21 +1,16 @@
 # Detailed TODOs
 - Add diags output to `ExecutionQueue::optimize`
 - Have derive macro for queue generate const order-checking code
-- Make EmbeddedProcessor load/unload async
-- Extend derive macro for EmbeddedProcessor
-    - Add support for load/unload
-	   - Figure out a way make calls to load/unload optional?
-- Update documentation for EmbeddedProcessor
 - Reverse order of values in ValueSet (because otherwise its *really* unintuitive ...)
 
 # High-level TODOs
 - Add remaining docs
     - `Executor`
-    - High-level explanation of core concepts
+    - High-level explanation of core concepts in crate root
 - Build serialization/deserialization API for embedded/desktop
     - Behind `serde` feature flag, make the algorithm itself exchangeable!
     - "Serialize" on embedded by either transmuting into byte slices or just straight up storing raw pointer+len and "forgetting" the memory temporarily in regards to the borrow checker
-- Implement alloc based stack
+- Build stack debugging tools <3
 - Build supporting crate for inputs (stabg-input?)
     - `InputProcessor` for desktop
     - `make_input_processor` macro for embedded

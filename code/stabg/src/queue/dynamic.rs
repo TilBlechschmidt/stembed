@@ -3,7 +3,7 @@ use crate::{
     context::ExecutionContext,
     identifier::ShortID,
     processor::Processor,
-    processor::{ExecutionError, InitializationContext, InitializationError},
+    processor::{ExecutionError, InitializationContext},
     registry::DynamicRegistry,
     stack::Stack,
     Identifier,
@@ -50,7 +50,7 @@ impl DynamicExecutionQueue {
     pub fn schedule<P: Processor + 'static>(
         &mut self,
         processor: P,
-    ) -> Result<&mut Self, InitializationError> {
+    ) -> Result<&mut Self, ::alloc::string::String> {
         self.schedule_boxed(Box::new(processor))
     }
 
@@ -82,7 +82,7 @@ impl DynamicExecutionQueue {
     fn schedule_boxed(
         &mut self,
         mut processor: OwnedProcessor,
-    ) -> Result<&mut Self, InitializationError> {
+    ) -> Result<&mut Self, ::alloc::string::String> {
         let mut ctx = InitializationContext::new();
         processor.load(&mut ctx)?;
 

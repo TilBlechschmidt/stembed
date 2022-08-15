@@ -19,7 +19,7 @@ fn full_stack_example() {
     let _ = env_logger::builder().is_test(true).try_init();
 
     // Build the data storage structures
-    let mut stack = FixedSizeStack::<256>::new();
+    let mut stack = DynamicStack::new();
     let mut executor = Executor::new(&mut stack);
 
     // Build an execution stack
@@ -49,7 +49,7 @@ impl Processor for TestProcessor1 {
         "test.processor1"
     }
 
-    fn load(&mut self, context: &mut InitializationContext) -> Result<(), InitializationError> {
+    fn load(&mut self, context: &mut InitializationContext) -> Result<(), String> {
         context
             .register::<TestType1>(Output)
             .register::<TestType2>(Output);
@@ -75,7 +75,7 @@ impl Processor for TestProcessor2 {
         "test.processor2"
     }
 
-    fn load(&mut self, context: &mut InitializationContext) -> Result<(), InitializationError> {
+    fn load(&mut self, context: &mut InitializationContext) -> Result<(), String> {
         context
             .register::<TestType1>(Input)
             .register::<TestType2>(Input);

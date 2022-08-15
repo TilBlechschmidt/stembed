@@ -97,12 +97,28 @@ pub fn derive_embedded_processor(input: TokenStream) -> TokenStream {
             const TYPES_OUTPUT: &'static [::stabg::Identifier] = &[#(#outputs::IDENTIFIER, )*];
             const STACK_USAGE: usize = #bytes + #items * ::stabg::FixedSizeStack::<0>::OVERHEAD;
 
-            type Fut<'s> = impl ::core::future::Future<Output = Result<(), ::stabg::processor::ExecutionError>> + 's
+            type LoadFut<'s> = impl ::core::future::Future<Output = Result<(), &'static str>> + 's
             where
                 Self: 's;
 
-            fn process_raw<'s>(&'s mut self, context: ::stabg::ExecutionContext<'s, 's>) -> Self::Fut<'s> {
+            type ProcessFut<'s> = impl ::core::future::Future<Output = Result<(), ::stabg::processor::ExecutionError>> + 's
+            where
+                Self: 's;
+
+            type UnloadFut<'s> = impl ::core::future::Future<Output = ()> + 's
+            where
+                Self: 's;
+
+            fn load_raw<'s>(&'s mut self) -> Self::LoadFut<'s> {
+                async move { self.load().await }
+            }
+
+            fn process_raw<'s>(&'s mut self, context: ::stabg::ExecutionContext<'s, 's>) -> Self::ProcessFut<'s> {
                 async move { self.process(context).await }
+            }
+
+            fn unload_raw<'s>(&'s mut self) -> Self::UnloadFut<'s> {
+                async move { self.unload().await }
             }
         }
     };

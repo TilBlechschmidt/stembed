@@ -1,5 +1,6 @@
 #![feature(type_alias_impl_trait)]
 #![feature(generic_associated_types)]
+#![no_std]
 
 use stabg::{processor::*, *};
 
@@ -47,17 +48,29 @@ fn async_full_stack_example() {
 // ————————————— Implementations of processors below —————————————
 
 impl TestProcessor1 {
+    async fn load(&mut self) -> Result<(), &'static str> {
+        Ok(())
+    }
+
     async fn process(&mut self, mut ctx: ExecutionContext<'_, '_>) -> Result<(), ExecutionError> {
         ctx.push(TestType1::IDENTIFIER, &[42])?
             .push(TestType2::IDENTIFIER, &[69])?;
         Ok(())
     }
+
+    async fn unload(&mut self) {}
 }
 
 impl TestProcessor2 {
+    async fn load(&mut self) -> Result<(), &'static str> {
+        Ok(())
+    }
+
     async fn process(&mut self, ctx: ExecutionContext<'_, '_>) -> Result<(), ExecutionError> {
         assert_eq!(ctx.get(TestType1::IDENTIFIER)?[0], 42);
         assert_eq!(ctx.get(TestType2::IDENTIFIER)?[0], 69);
         Ok(())
     }
+
+    async fn unload(&mut self) {}
 }

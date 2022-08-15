@@ -1,8 +1,6 @@
 #![no_std]
 #![feature(doc_auto_cfg, doc_cfg)]
 #![cfg_attr(feature = "nightly", feature(generic_associated_types))]
-#![allow(dead_code)]
-#![feature(async_closure, unboxed_closures)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -52,9 +50,6 @@ pub use registry::IteratorRegistry;
 /// ```
 #[cfg(feature = "derive")]
 pub use stabg_derive::Identifiable;
-
-#[cfg(feature = "derive")]
-pub use stabg_derive::EmbeddedProcessor;
 
 #[cfg(feature = "derive")]
 pub use stabg_derive::AsyncExecutionQueue;
